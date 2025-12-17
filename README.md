@@ -417,11 +417,43 @@ Each month has a specific vibrant color:
 
 ## 🧪 Testing
 
-### Test DEV API
+### Unit Tests
+
+The project has comprehensive unit tests for both frontend and backend.
+
+```bash
+# Run all tests (frontend + backend)
+make test-all
+
+# Frontend tests only (Jest)
+make test-frontend
+make test-frontend-watch    # Watch mode for development
+
+# Backend tests only (Go)
+make test-backend
+make test-backend-coverage  # With coverage report
+
+# Generate full coverage reports
+make test-coverage          # HTML coverage for both frontend and backend
+
+# Run benchmarks (Go)
+make test-bench
+```
+
+**Test Coverage:**
+- Frontend: ~80 test cases covering utilities, hooks, and components
+- Backend: ~75 test cases covering Lambda handlers, auth, and mappings
+- Total: ~155 unit tests with ~85% code coverage
+
+📚 **Full testing documentation**: See [TESTING.md](./TESTING.md)
+
+### API Integration Tests
+
+Test the deployed API endpoints:
 
 ```bash
 # Test all endpoints
-make test
+make test-api
 
 # Populate with random data (20 countries)
 make seed

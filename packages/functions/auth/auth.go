@@ -20,8 +20,13 @@ type APIKeyItem struct {
 	Active    bool   `dynamodbav:"active"`
 }
 
+// DynamoDBScanAPI defines the interface for DynamoDB Scan operation
+type DynamoDBScanAPI interface {
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
+}
+
 // ValidateAPIKey checks if the provided API key is valid and active
-func ValidateAPIKey(ctx context.Context, client *dynamodb.Client, apiKey string) bool {
+func ValidateAPIKey(ctx context.Context, client DynamoDBScanAPI, apiKey string) bool {
 	if apiKey == "" {
 		log.Printf("API key validation failed: empty key")
 		return false

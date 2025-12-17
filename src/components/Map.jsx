@@ -11,7 +11,7 @@ import { countryCentroids } from '@/config/countryCentroids'
  * Build GeoJSON FeatureCollection with country centroids and Portuguese names
  * @returns {Object} GeoJSON FeatureCollection
  */
-function buildCountryLabelsGeoJSON() {
+export function buildCountryLabelsGeoJSON() {
   const features = Object.entries(countryCentroids).map(([iso, coordinates]) => ({
     type: 'Feature',
     geometry: {

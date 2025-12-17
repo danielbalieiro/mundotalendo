@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod test seed clear logs-webhook logs-stats unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed clear logs-webhook logs-stats unlock
 
 # Variables
 API_DEV := https://api.dev.mundotalendo.com.br
@@ -82,7 +82,52 @@ get-api-key: ## Get first active API key for testing
 		--expression-attribute-values '{":pk":{"S":"APIKEY#"},":active":{"BOOL":true}}' \
 		--query 'Items[0].key.S' --output text
 
-test: ## Test dev API endpoints
+# Unit Tests
+check-deps: ## Check if test dependencies are installed
+	@if ! npm list jest > /dev/null 2>&1; then \
+		echo "$(YELLOW)Installing test dependencies...$(NC)"; \
+		npm install --include=dev --legacy-peer-deps || npm install --include=dev --force; \
+	fi
+
+test-frontend: check-deps ## Run frontend unit tests (Jest)
+	@echo "$(GREEN)Running frontend tests...$(NC)"
+	@npm test
+
+test-frontend-watch: check-deps ## Run frontend tests in watch mode
+	@echo "$(GREEN)Running frontend tests in watch mode...$(NC)"
+	@npm run test:watch
+
+test-backend: ## Run backend unit tests (Go)
+	@echo "$(GREEN)Running backend tests...$(NC)"
+	@cd packages/functions && go test ./... -v
+
+test-backend-coverage: ## Run backend tests with coverage
+	@echo "$(GREEN)Running backend tests with coverage...$(NC)"
+	@cd packages/functions && go test ./... -cover
+
+test-all: check-deps ## Run all unit tests (frontend + backend)
+	@echo "$(GREEN)Running all unit tests...$(NC)"
+	@echo "\n$(YELLOW)=== Frontend Tests ===$(NC)"
+	@npm test
+	@echo "\n$(YELLOW)=== Backend Tests ===$(NC)"
+	@cd packages/functions && go test ./... -v
+
+test-coverage: check-deps ## Generate coverage reports for all tests
+	@echo "$(GREEN)Generating coverage reports...$(NC)"
+	@echo "\n$(YELLOW)=== Frontend Coverage ===$(NC)"
+	@npm run test:coverage
+	@echo "\n$(YELLOW)=== Backend Coverage ===$(NC)"
+	@cd packages/functions && go test ./... -coverprofile=coverage.out
+	@cd packages/functions && go tool cover -html=coverage.out -o coverage.html
+	@echo "\n$(GREEN)Coverage reports generated!$(NC)"
+	@echo "Backend HTML report: packages/functions/coverage.html"
+
+test-bench: ## Run Go benchmarks
+	@echo "$(GREEN)Running benchmarks...$(NC)"
+	@cd packages/functions && go test ./... -bench=. -benchmem
+
+# API Integration Tests
+test-api: ## Test dev API endpoints
 	@echo "$(GREEN)Testing DEV API...$(NC)"
 	@API_KEY=$$($(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \

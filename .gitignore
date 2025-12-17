@@ -7,6 +7,10 @@ node_modules/
 coverage/
 *.lcov
 .nyc_output
+coverage.out
+coverage.html
+**/coverage.out
+**/coverage.html
 
 # Next.js
 .next/
