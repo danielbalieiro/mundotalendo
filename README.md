@@ -35,9 +35,12 @@ This is a **collaborative** project about **discovering cultures** through readi
 - **Runtime**: Go 1.23+ (ARM64/Graviton)
 - **Platform**: AWS Lambda
 - **Database**: DynamoDB (Single Table Design)
-  - `DataTable` - Events, errors, and API keys with partition key prefixes
-- **API**: API Gateway V2 (HTTP API)
-- **Authentication**: API Key via X-API-Key header
+  - **DataTable** - Single table with partition key prefixes:
+    - `EVENT#LEITURA` - Reading events with progress
+    - `ERROR#*` - Failed webhook processing logs
+    - `APIKEY#*` - API keys for authentication
+- **API**: API Gateway V2 (HTTP API with CORS)
+- **Authentication**: API Key via `X-API-Key` header (in-memory validation)
 - **Region**: us-east-2 (Ohio)
 
 ### Frontend
@@ -64,37 +67,39 @@ mundotalendo/
 │   │   ├── page.js             # Main page
 │   │   └── globals.css         # Styles + MapLibre CSS
 │   ├── components/
-│   │   └── Map.jsx             # Map with dynamic transparency
+│   │   └── Map.jsx             # Interactive map with dynamic transparency
 │   ├── config/
-│   │   ├── countries.js        # 193 countries ISO → PT-BR
-│   │   ├── countryCentroids.js # 1 exact point per country
-│   │   └── months.js           # 12 months → colors → countries
+│   │   ├── countries.js        # 193 countries ISO3 → PT-BR names
+│   │   ├── countryCentroids.js # 1 exact point per country (no duplicates)
+│   │   └── months.js           # 12 months → vibrant colors
 │   └── hooks/
-│       └── useStats.js         # SWR polling /stats
-├── packages/functions/         # Go Lambdas
+│       └── useStats.js         # SWR with auto-refresh every 15s
+├── packages/functions/         # Go Lambda Functions
 │   ├── types/
-│   │   └── types.go            # Shared structs
+│   │   └── types.go            # Shared structs (WebhookPayload, LeituraItem, etc.)
 │   ├── mapping/
-│   │   └── countries.go        # PT-BR Name → ISO3
+│   │   └── countries.go        # PT-BR country name → ISO3 code (208 countries)
 │   ├── auth/
-│   │   └── auth.go             # API key validation
-│   ├── webhook/                # POST /webhook
+│   │   └── auth.go             # API key validation (in-memory match)
+│   ├── webhook/                # POST /webhook - Process reading events
 │   │   ├── main.go
 │   │   └── go.mod
-│   ├── stats/                  # GET /stats
+│   ├── stats/                  # GET /stats - Return country progress
 │   │   ├── main.go
 │   │   └── go.mod
-│   ├── seed/                   # POST /test/seed
+│   ├── seed/                   # POST /test/seed - Generate test data
 │   │   ├── main.go
 │   │   └── go.mod
-│   └── clear/                  # POST /clear
+│   └── clear/                  # POST /clear - Clear all data
 │       ├── main.go
 │       └── go.mod
-├── sst.config.ts               # SST configuration
-├── next.config.js              # Next.js config
-├── postcss.config.js           # Tailwind v4
-├── CLAUDE.md                   # Complete technical context
-└── project.md                  # Original specification
+├── sst.config.ts               # SST Ion configuration (IaC)
+├── next.config.js              # Next.js + Turbopack/Webpack config
+├── postcss.config.js           # Tailwind CSS v4 config
+├── Makefile                    # Dev commands (deploy, test, logs, etc.)
+├── .env.local                  # Environment variables (API_URL, API_KEY)
+├── CLAUDE.md                   # Technical context and decision history
+└── project.md                  # Original project specification
 ```
 
 ## 🔌 API Endpoints
@@ -199,21 +204,24 @@ Populates database with random data (development)
 ```
 
 ### `POST /clear`
-Clears all tables (development)
+Clears all data from DataTable (development only)
 
 **Response:**
 ```json
 {
   "success": true,
-  "eventsDeleted": 15,
-  "errorsDeleted": 3,
-  "totalDeleted": 18
+  "leiturasDeleted": 15,
+  "falhasDeleted": 3
 }
 ```
+
+**Note:** This endpoint clears all reading events (`EVENT#LEITURA`) and error logs (`ERROR#*`) from the Single Table, but preserves API keys.
 
 ## 🔐 API Key Authentication
 
 All API endpoints require authentication using an API key passed via the `X-API-Key` header.
+
+**Validation Method:** API keys are validated by scanning all active keys from DynamoDB and matching in-memory (Go code), instead of using DynamoDB filter expressions. This ensures reliable authentication for all keys.
 
 ### Creating API Keys
 
@@ -350,23 +358,28 @@ Access: http://localhost:3000
 ### Deploy to DEV
 
 ```bash
-# With Makefile (recommended - automatically configures env vars)
+# With Makefile (recommended - automatically fixes env vars)
 make deploy-dev
 
-# Or manually
+# Or manually (requires fix-env afterward)
 npx sst deploy --stage dev
-make fix-env  # Required after deploy (SST bug)
+make fix-env  # Required: SST bug workaround for Lambda env vars
 ```
+
+**What happens:**
+1. SST deploys all resources (Lambdas, API Gateway, DynamoDB, CloudFront)
+2. Makefile automatically runs `fix-env` to set `SST_Resource_DataTable_name` on all Lambdas
+3. Outputs URLs for API and frontend
 
 ### Deploy to PROD
 
 ```bash
-# With Makefile (confirmation + auto-fix env vars)
+# With Makefile (requires confirmation + auto-fixes env vars)
 make deploy-prod
 
-# Or manually
+# Or manually (requires fix-env afterward)
 npx sst deploy --stage prod
-make fix-env  # Required after deploy (SST bug)
+make fix-env  # Required: SST bug workaround for Lambda env vars
 ```
 
 ### Remove Stack
