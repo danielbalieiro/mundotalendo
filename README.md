@@ -103,9 +103,43 @@ Recebe eventos de leitura do Maratona.app
 **Validações:**
 - ✅ Filtra por `identificador = "maratona-lendo-paises"`
 - ✅ Aceita `tipo = "leitura"` OU `"atividade"`
+- ✅ Se `concluido = true`, força progresso = 100%
 - ✅ Calcula progresso máximo entre vinculados
 - ✅ Salva payload completo em metadata JSON
 - ✅ Loga falhas em tabela separada
+
+**Response Structure:**
+```json
+{
+  "success": true,
+  "processed": 2,
+  "failed": 1,
+  "total": 3,
+  "status": "PARTIAL",
+  "errors": [
+    {
+      "code": "COUNTRY_NOT_FOUND",
+      "message": "Country not mapped in ISO table",
+      "details": "XYZ"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- `COMPLETED` - All items processed successfully
+- `PARTIAL` - Some items processed, some failed
+- `FAILED` - No items processed
+- `NO_DATA` - No valid data to process
+
+**Error Codes:**
+| Code | Description |
+|------|-------------|
+| `UNMARSHAL_ERROR` | Failed to parse JSON payload |
+| `COUNTRY_NOT_FOUND` | Country name not found in ISO mapping table |
+| `METADATA_MARSHAL_ERROR` | Failed to serialize metadata |
+| `DYNAMODB_MARSHAL_ERROR` | Failed to marshal item for DynamoDB |
+| `DYNAMODB_PUT_ERROR` | Failed to save item to DynamoDB |
 
 **Payload:**
 ```json
@@ -178,6 +212,7 @@ Limpa todas as tabelas (desenvolvimento)
 - Go 1.23+
 - AWS CLI configurado
 - Conta AWS
+- Make (já vem no macOS/Linux)
 
 ### Instalação
 
@@ -186,14 +221,48 @@ Limpa todas as tabelas (desenvolvimento)
 git clone git@github.com:danielbalieiro/mundotalendo.git
 cd mundotalendo
 
-# 2. Instale dependências Node.js
-npm install
+# 2. Instale todas as dependências
+make install
 
-# 3. Instale dependências Go
-cd packages/functions/webhook && go mod tidy && cd ../..
+# Ou manualmente:
+# npm install
+# cd packages/functions/webhook && go mod tidy && cd ../..
 cd packages/functions/stats && go mod tidy && cd ../..
 cd packages/functions/seed && go mod tidy && cd ../..
 cd packages/functions/clear && go mod tidy && cd ../..
+```
+
+### ⚡ Makefile - Comandos Rápidos
+
+O projeto inclui um Makefile para facilitar operações comuns:
+
+```bash
+# Ver todos os comandos disponíveis
+make help
+
+# Build e Deploy
+make build          # Compila todas as funções Go
+make tidy           # Atualiza dependências Go
+make deploy-dev     # Deploy para dev
+make deploy-prod    # Deploy para prod
+make clean          # Limpa builds e cache
+
+# Desenvolvimento
+make dev            # Inicia servidor Next.js local
+
+# Testes e API
+make test           # Testa todos os endpoints
+make seed           # Popula banco com 20 países aleatórios
+make clear          # Limpa todas as tabelas
+make webhook-test   # Testa webhook com payload de exemplo
+
+# Logs (tempo real)
+make logs-webhook   # Logs do webhook Lambda
+make logs-stats     # Logs do stats Lambda
+
+# Utilidades
+make info           # Mostra recursos AWS
+make unlock         # Desbloqueia deploy travado
 ```
 
 ### Configuração
@@ -211,14 +280,11 @@ NEXT_PUBLIC_API_URL=https://api.dev.mundotalendo.com.br
 ### Desenvolvimento
 
 ```bash
-# Frontend local (webpack, não turbopack)
+# Com Makefile (recomendado)
+make dev
+
+# Ou manualmente
 npm run dev:local
-
-# Frontend + backend serverless (SST)
-npm run dev
-
-# Build de produção
-npm run build
 ```
 
 Acesse: http://localhost:3000
@@ -228,26 +294,33 @@ Acesse: http://localhost:3000
 ### Deploy para DEV
 
 ```bash
+# Com Makefile (recomendado - já configura env vars automaticamente)
+make deploy-dev
+
+# Ou manualmente
 npx sst deploy --stage dev
-```
-
-**Importante:** Após o deploy, configure manualmente as variáveis de ambiente das Lambdas Go:
-
-```bash
-# Ver CLAUDE.md seção "Workaround Manual" para script completo
+make fix-env  # Necessário após deploy (bug do SST)
 ```
 
 ### Deploy para PROD
 
 ```bash
+# Com Makefile (confirmação + auto-fix env vars)
+make deploy-prod
+
+# Ou manualmente
 npx sst deploy --stage prod
+make fix-env  # Necessário após deploy (bug do SST)
 ```
 
 ### Remover Stack
 
 ```bash
+# Dev
+make remove-dev
+
+# Ou manualmente
 npx sst remove --stage dev
-# ou
 npx sst remove --stage prod
 ```
 
@@ -278,6 +351,19 @@ Cada mês tem uma cor vibrante específica:
 ### Testar API DEV
 
 ```bash
+# Testar todos os endpoints
+make test
+
+# Popular com dados aleatórios (20 países)
+make seed
+
+# Limpar banco
+make clear
+
+# Testar webhook com payload de exemplo
+make webhook-test
+
+# Ou manualmente:
 # Limpar banco
 curl -X POST https://api.dev.mundotalendo.com.br/clear
 
@@ -288,20 +374,6 @@ curl -X POST https://api.dev.mundotalendo.com.br/test/seed \
 
 # Ver estatísticas
 curl https://api.dev.mundotalendo.com.br/stats | jq .
-
-# Simular webhook
-curl -X POST https://api.dev.mundotalendo.com.br/webhook \
-  -H "Content-Type: application/json" \
-  -d '{
-    "perfil": {"nome": "Test", "link": "https://test.com"},
-    "maratona": {"identificador": "maratona-lendo-paises"},
-    "desafios": [{
-      "descricao": "Brasil",
-      "categoria": "Janeiro",
-      "tipo": "leitura",
-      "vinculados": [{"progresso": 85, "updatedAt": "2024-12-16T10:00:00Z"}]
-    }]
-  }'
 ```
 
 ## 📊 Monitoramento
@@ -309,27 +381,36 @@ curl -X POST https://api.dev.mundotalendo.com.br/webhook \
 ### CloudWatch Logs
 
 ```bash
+# Com Makefile (recomendado)
+make logs-webhook   # Logs do webhook em tempo real
+make logs-stats     # Logs do stats em tempo real
+
+# Ver informações dos recursos AWS
+make info
+
+# Ou manualmente:
 # Stats Lambda
-aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteNodhexHandlerFunction --follow
+aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteNodhexHandlerFunction --follow --region us-east-2
 
 # Webhook Lambda
-aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteBahodaHandlerFunction --follow
-
-# Seed Lambda
-aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteTrkbveHandlerFunction --follow
+aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteBahodaHandlerFunction --follow --region us-east-2
 ```
 
 ### DynamoDB Tables
 
 ```bash
+# Ver todas as tabelas do projeto
+make info
+
+# Ou manualmente:
 # Ver tabelas
 aws dynamodb list-tables --region us-east-2 | grep mundotalendo
 
 # Scan Leituras
-aws dynamodb scan --table-name mundotalendo-dev-LeiturasTable-vnodzvvv --region us-east-2
+aws dynamodb scan --table-name <nome-tabela-leituras> --region us-east-2
 
 # Scan Falhas
-aws dynamodb scan --table-name mundotalendo-dev-FalhasTable-dzmfrhmb --region us-east-2
+aws dynamodb scan --table-name <nome-tabela-falhas> --region us-east-2
 ```
 
 ## 🔧 Troubleshooting
