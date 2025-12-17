@@ -33,21 +33,17 @@ func ValidateAPIKey(ctx context.Context, client *dynamodb.Client, apiKey string)
 		return false
 	}
 
-	// Scan DynamoDB to find the API key
-	// Note: In production, consider adding a GSI on the 'key' attribute for better performance
+	// Scan DynamoDB for all active API keys (filter expression has issues, so we validate in code)
 	result, err := client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:        &tableName,
-		FilterExpression: aws.String("begins_with(PK, :pk) AND #key = :apikey AND #active = :active"),
+		FilterExpression: aws.String("begins_with(PK, :pk) AND #active = :active"),
 		ExpressionAttributeNames: map[string]string{
-			"#key":    "key",
 			"#active": "active",
 		},
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
 			":pk":     &ddbTypes.AttributeValueMemberS{Value: "APIKEY#"},
-			":apikey": &ddbTypes.AttributeValueMemberS{Value: apiKey},
 			":active": &ddbTypes.AttributeValueMemberBOOL{Value: true},
 		},
-		Limit: aws.Int32(1), // We only need to know if at least one exists
 	})
 
 	if err != nil {
@@ -55,11 +51,17 @@ func ValidateAPIKey(ctx context.Context, client *dynamodb.Client, apiKey string)
 		return false
 	}
 
-	// If we found at least one matching active key, it's valid
-	if len(result.Items) > 0 {
-		var item APIKeyItem
-		if err := attributevalue.UnmarshalMap(result.Items[0], &item); err == nil {
-			log.Printf("API key validated successfully: %s", item.Name)
+	// Iterate through results and match the key in code
+	for _, item := range result.Items {
+		var apiKeyItem APIKeyItem
+		if err := attributevalue.UnmarshalMap(item, &apiKeyItem); err != nil {
+			log.Printf("ERROR unmarshaling API key item: %v", err)
+			continue
+		}
+
+		// Check if this key matches and is active
+		if apiKeyItem.Key == apiKey && apiKeyItem.Active {
+			log.Printf("API key validated successfully: %s", apiKeyItem.Name)
 			return true
 		}
 	}
