@@ -28,7 +28,7 @@ export default $config({
       cors: {
         allowOrigins: ["*"],
         allowMethods: ["GET", "POST", "OPTIONS"],
-        allowHeaders: ["Content-Type", "Authorization"],
+        allowHeaders: ["Content-Type", "Authorization", "X-API-Key"],
       },
       domain:
         $app.stage === "prod"

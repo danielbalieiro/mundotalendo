@@ -218,13 +218,13 @@ create-api-key: ## Create new API key (make create-api-key name=myapp)
 		echo "$(RED)Error: Use 'make create-api-key name=yourname'$(NC)"; \
 		exit 1; \
 	fi
-	@LEITURAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
 	UUID=$$(uuidgen | tr '[:upper:]' '[:lower:]'); \
 	DATE=$$(date +%Y-%m-%d); \
 	API_KEY="$(name)-$$UUID-$$DATE"; \
 	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
 	echo "$(GREEN)Creating API key...$(NC)"; \
-	aws dynamodb put-item --region $(REGION) --table-name $$LEITURAS_TABLE \
+	aws dynamodb put-item --region $(REGION) --table-name $$DATA_TABLE \
 		--item '{"PK":{"S":"APIKEY#$(name)"},"SK":{"S":"KEY#'$$UUID'"},"name":{"S":"$(name)"},"key":{"S":"'$$API_KEY'"},"createdAt":{"S":"'$$TIMESTAMP'"},"active":{"BOOL":true}}' \
 		--output text > /dev/null 2>&1; \
 	echo "$(GREEN)API Key created:$(NC)"; \
@@ -246,7 +246,7 @@ delete-api-key: ## Delete API key (make delete-api-key name=myapp)
 		echo "$(RED)Error: Use 'make delete-api-key name=yourname'$(NC)"; \
 		exit 1; \
 	fi
-	@echo "$(YELLOW)Deleting API key for: $(name)$(NC)"; \
+	@echo "$(YELLOW)Deleting API key for: $(name)$(NC)"
 	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
 	ITEMS=$$(aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
 		--filter-expression "PK = :pk" \
