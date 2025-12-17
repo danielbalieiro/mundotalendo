@@ -81,8 +81,6 @@ samconfig.toml
 Thumbs.db
 
 # Documentação interna
-CLAUDE.md
-claude.md
 project.md
 .claude/
 *.plan.md
