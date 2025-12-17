@@ -1,35 +1,35 @@
 # Mundo Tá Lendo 2026 🌍📚
 
-Dashboard de telemetria global do desafio de leitura "Mundo Tá Lendo 2026". Descubra colaborativamente culturas ao redor do mundo através de um mapa interativo que mostra a jornada coletiva de leitura com sistema de progresso visual.
+Global telemetry dashboard for the "Mundo Tá Lendo 2026" reading challenge. Collaboratively discover cultures around the world through an interactive map that shows the collective reading journey with a visual progress system.
 
-## 🌟 Conceito
+## 🌟 Concept
 
-Este é um projeto **colaborativo** sobre **descobrir culturas** através da leitura. À medida que participantes leem livros de diferentes países ao longo de 2026, o mapa vai revelando a jornada coletiva de descoberta cultural com **transparência dinâmica** baseada no progresso de leitura.
+This is a **collaborative** project about **discovering cultures** through reading. As participants read books from different countries throughout 2026, the map reveals the collective journey of cultural discovery with **dynamic transparency** based on reading progress.
 
-## 🚀 Ambientes
+## 🚀 Environments
 
-### Produção
-- **Frontend**: https://mundotalendo.com.br *(a configurar)*
-- **API**: https://api.mundotalendo.com.br *(a configurar)*
+### Production
+- **Frontend**: https://mundotalendo.com.br *(to be configured)*
+- **API**: https://api.mundotalendo.com.br *(to be configured)*
 
-### Desenvolvimento
+### Development
 - **Frontend**: https://dev.mundotalendo.com.br ✅
 - **API**: https://api.dev.mundotalendo.com.br ✅
 
-## ✨ Funcionalidades
+## ✨ Features
 
-- 🗺️ **Mapa interativo** com MapLibre GL JS mostrando 193 países
-- 🎨 **Cores vibrantes** - 12 meses com cores distintas
-- 📊 **Sistema de progresso** - Transparência visual de 0-100%
-  - 0% → 30% opaco (descoberta inicial)
-  - 100% → 100% opaco (completamente explorado)
-- 🔄 **Atualização em tempo real** - Polling a cada 15s
-- 🇧🇷 **Labels em português** - Todos os países com nomes PT-BR
-- 📱 **Responsivo** - Funciona em desktop e mobile
-- 🎯 **Tooltip interativo** - Mostra progresso ao hover
-- 🌊 **Oceano clareado** - Design visual agradável
+- 🗺️ **Interactive map** with MapLibre GL JS showing 193 countries
+- 🎨 **Vibrant colors** - 12 months with distinct colors
+- 📊 **Progress system** - Visual transparency from 0-100%
+  - 0% → 30% opacity (initial discovery)
+  - 100% → 100% opacity (fully explored)
+- 🔄 **Real-time updates** - Polling every 15s
+- 🇧🇷 **Portuguese labels** - All countries with PT-BR names
+- 📱 **Responsive** - Works on desktop and mobile
+- 🎯 **Interactive tooltip** - Shows progress on hover
+- 🌊 **Lightened ocean** - Pleasant visual design
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
 ### Backend (Serverless)
 - **Runtime**: Go 1.23+ (ARM64/Graviton)
@@ -48,34 +48,36 @@ Este é um projeto **colaborativo** sobre **descobrir culturas** através da lei
 - **Data Fetching**: SWR (polling 15s)
 - **Deploy**: CloudFront + S3
 
-### Infraestrutura
+### Infrastructure
 - **IaC**: SST v3.17.25 (Ion)
 - **DNS**: AWS Route 53
 - **SSL**: AWS Certificate Manager
 - **CDN**: CloudFront
 
-## 📁 Estrutura do Projeto
+## 📁 Project Structure
 
 ```
 mundotalendo/
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── layout.js           # Layout raiz
-│   │   ├── page.js             # Página principal
-│   │   └── globals.css         # Estilos + MapLibre CSS
+│   │   ├── layout.js           # Root layout
+│   │   ├── page.js             # Main page
+│   │   └── globals.css         # Styles + MapLibre CSS
 │   ├── components/
-│   │   └── Map.jsx             # Mapa com transparência dinâmica
+│   │   └── Map.jsx             # Map with dynamic transparency
 │   ├── config/
-│   │   ├── countries.js        # 193 países ISO → PT-BR
-│   │   ├── countryCentroids.js # 1 ponto exato por país
-│   │   └── months.js           # 12 meses → cores → países
+│   │   ├── countries.js        # 193 countries ISO → PT-BR
+│   │   ├── countryCentroids.js # 1 exact point per country
+│   │   └── months.js           # 12 months → colors → countries
 │   └── hooks/
 │       └── useStats.js         # SWR polling /stats
-├── packages/functions/         # Lambdas Go
+├── packages/functions/         # Go Lambdas
 │   ├── types/
-│   │   └── types.go            # Structs compartilhados
+│   │   └── types.go            # Shared structs
 │   ├── mapping/
-│   │   └── countries.go        # Nome PT-BR → ISO3
+│   │   └── countries.go        # PT-BR Name → ISO3
+│   ├── auth/
+│   │   └── auth.go             # API key validation
 │   ├── webhook/                # POST /webhook
 │   │   ├── main.go
 │   │   └── go.mod
@@ -88,11 +90,11 @@ mundotalendo/
 │   └── clear/                  # POST /clear
 │       ├── main.go
 │       └── go.mod
-├── sst.config.ts               # Configuração SST
+├── sst.config.ts               # SST configuration
 ├── next.config.js              # Next.js config
 ├── postcss.config.js           # Tailwind v4
-├── CLAUDE.md                   # Contexto técnico completo
-└── project.md                  # Especificação original
+├── CLAUDE.md                   # Complete technical context
+└── project.md                  # Original specification
 ```
 
 ## 🔌 API Endpoints
@@ -100,15 +102,15 @@ mundotalendo/
 **⚠️ All endpoints require authentication via `X-API-Key` header.**
 
 ### `POST /webhook`
-Recebe eventos de leitura do Maratona.app
+Receives reading events from Maratona.app
 
-**Validações:**
-- ✅ Filtra por `identificador = "maratona-lendo-paises"`
-- ✅ Aceita `tipo = "leitura"` OU `"atividade"`
-- ✅ Se `concluido = true`, força progresso = 100%
-- ✅ Calcula progresso máximo entre vinculados
-- ✅ Salva payload completo em metadata JSON
-- ✅ Loga falhas em tabela separada
+**Validations:**
+- ✅ Filters by `identificador = "maratona-lendo-paises"`
+- ✅ Accepts `tipo = "leitura"` OR `"atividade"`
+- ✅ If `concluido = true`, forces progress = 100%
+- ✅ Calculates maximum progress among vinculados
+- ✅ Saves complete payload in JSON metadata
+- ✅ Logs failures in separate table
 
 **Response Structure:**
 ```json
@@ -172,7 +174,7 @@ Recebe eventos de leitura do Maratona.app
 ```
 
 ### `GET /stats`
-Retorna países explorados com progresso
+Returns explored countries with progress
 
 **Response:**
 ```json
@@ -187,7 +189,7 @@ Retorna países explorados com progresso
 ```
 
 ### `POST /test/seed`
-Popula banco com dados aleatórios (desenvolvimento)
+Populates database with random data (development)
 
 **Payload:**
 ```json
@@ -197,7 +199,7 @@ Popula banco com dados aleatórios (desenvolvimento)
 ```
 
 ### `POST /clear`
-Limpa todas as tabelas (desenvolvimento)
+Clears all tables (development)
 
 **Response:**
 ```json
@@ -248,201 +250,204 @@ NEXT_PUBLIC_API_KEY=frontend-uuid-date
 
 The frontend automatically includes the API key in all requests when configured.
 
-## 🚀 Setup Local
+## 🚀 Local Setup
 
-### Pré-requisitos
-- Node.js 18+ (recomendado 24.6.0)
+### Prerequisites
+- Node.js 18+ (recommended 24.6.0)
 - Go 1.23+
-- AWS CLI configurado
-- Conta AWS
-- Make (já vem no macOS/Linux)
+- AWS CLI configured
+- AWS Account
+- Make (pre-installed on macOS/Linux)
 
-### Instalação
+### Installation
 
 ```bash
-# 1. Clone o repositório
+# 1. Clone the repository
 git clone git@github.com:danielbalieiro/mundotalendo.git
 cd mundotalendo
 
-# 2. Instale todas as dependências
+# 2. Install all dependencies
 make install
 
-# Ou manualmente:
-# npm install
-# cd packages/functions/webhook && go mod tidy && cd ../..
-cd packages/functions/stats && go mod tidy && cd ../..
-cd packages/functions/seed && go mod tidy && cd ../..
-cd packages/functions/clear && go mod tidy && cd ../..
+# Or manually:
+npm install
+cd packages/functions/webhook && go mod tidy && cd ../../..
+cd packages/functions/stats && go mod tidy && cd ../../..
+cd packages/functions/seed && go mod tidy && cd ../../..
+cd packages/functions/clear && go mod tidy && cd ../../..
 ```
 
-### ⚡ Makefile - Comandos Rápidos
+### ⚡ Makefile - Quick Commands
 
-O projeto inclui um Makefile para facilitar operações comuns:
+The project includes a Makefile to facilitate common operations:
 
 ```bash
-# Ver todos os comandos disponíveis
+# View all available commands
 make help
 
-# Build e Deploy
-make build          # Compila todas as funções Go
-make tidy           # Atualiza dependências Go
-make deploy-dev     # Deploy para dev
-make deploy-prod    # Deploy para prod
-make clean          # Limpa builds e cache
+# Build and Deploy
+make build          # Compile all Go functions
+make tidy           # Update Go dependencies
+make deploy-dev     # Deploy to dev
+make deploy-prod    # Deploy to prod
+make clean          # Clean builds and cache
 
-# Desenvolvimento
-make dev            # Inicia servidor Next.js local
+# Development
+make dev            # Start local Next.js server
 
-# Testes e API
-make test           # Testa todos os endpoints
-make seed           # Popula banco com 20 países aleatórios
-make clear          # Limpa todas as tabelas
-make webhook-test   # Testa webhook com payload de exemplo
+# Testing and API
+make test           # Test all endpoints
+make seed           # Populate database with 20 random countries
+make clear          # Clear all tables
+make webhook-test   # Test webhook with sample payload
 
-# Logs (tempo real)
-make logs-webhook   # Logs do webhook Lambda
-make logs-stats     # Logs do stats Lambda
+# Logs (real-time)
+make logs-webhook   # Webhook Lambda logs
+make logs-stats     # Stats Lambda logs
 
 # API Key Management
-make create-api-key name=myapp  # Cria nova API key
-make list-api-keys              # Lista todas as keys
-make delete-api-key name=myapp  # Remove uma key
+make create-api-key name=myapp  # Create new API key
+make list-api-keys              # List all keys
+make delete-api-key name=myapp  # Remove a key
 
-# Utilidades
-make info           # Mostra recursos AWS
-make unlock         # Desbloqueia deploy travado
+# Utilities
+make info           # Show AWS resources
+make unlock         # Unlock stuck deployment
 ```
 
-### Configuração
+### Configuration
 
-Copie o template de configuração:
+Copy the configuration template:
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-Edite `.env.local`:
+Edit `.env.local`:
 
 ```bash
-# AWS API Gateway URL (obtenha após deploy)
+# AWS API Gateway URL (get after deploy)
 NEXT_PUBLIC_API_URL=https://api.dev.mundotalendo.com.br
 
-# API Key (crie com: make create-api-key name=frontend)
+# API Key (create with: make create-api-key name=frontend)
 NEXT_PUBLIC_API_KEY=frontend-uuid-date
 ```
 
-### Desenvolvimento
+### Development
 
 ```bash
-# Com Makefile (recomendado)
+# With Makefile (recommended)
 make dev
 
-# Ou manualmente
+# Or manually
 npm run dev:local
 ```
 
-Acesse: http://localhost:3000
+Access: http://localhost:3000
 
 ## 📦 Deploy
 
-### Deploy para DEV
+### Deploy to DEV
 
 ```bash
-# Com Makefile (recomendado - já configura env vars automaticamente)
+# With Makefile (recommended - automatically configures env vars)
 make deploy-dev
 
-# Ou manualmente
+# Or manually
 npx sst deploy --stage dev
-make fix-env  # Necessário após deploy (bug do SST)
+make fix-env  # Required after deploy (SST bug)
 ```
 
-### Deploy para PROD
+### Deploy to PROD
 
 ```bash
-# Com Makefile (confirmação + auto-fix env vars)
+# With Makefile (confirmation + auto-fix env vars)
 make deploy-prod
 
-# Ou manualmente
+# Or manually
 npx sst deploy --stage prod
-make fix-env  # Necessário após deploy (bug do SST)
+make fix-env  # Required after deploy (SST bug)
 ```
 
-### Remover Stack
+### Remove Stack
 
 ```bash
 # Dev
 make remove-dev
 
-# Ou manualmente
+# Or manually
 npx sst remove --stage dev
 npx sst remove --stage prod
 ```
 
-## 🎨 Sistema de Cores
+## 🎨 Color System
 
-Cada mês tem uma cor vibrante específica:
+Each month has a specific vibrant color:
 
-| Mês | Cor | Hex |
-|-----|-----|-----|
-| Janeiro | Vermelho vibrante | `#FF1744` |
-| Fevereiro | Ciano brilhante | `#00E5FF` |
-| Março | Amarelo limão | `#FFD600` |
-| Abril | Verde vibrante | `#00E676` |
-| Maio | Laranja intenso | `#FF6F00` |
-| Junho | Roxo vibrante | `#D500F9` |
-| Julho | Azul royal | `#2979FF` |
-| Agosto | Rosa vibrante | `#FF4081` |
-| Setembro | Teal brilhante | `#1DE9B6` |
-| Outubro | Laranja flamejante | `#FF9100` |
-| Novembro | Violeta profundo | `#651FFF` |
-| Dezembro | Magenta intenso | `#F50057` |
+| Month | Color | Hex |
+|-------|-------|-----|
+| January | Vibrant red | `#FF1744` |
+| February | Bright cyan | `#00E5FF` |
+| March | Lemon yellow | `#FFD600` |
+| April | Vibrant green | `#00E676` |
+| May | Intense orange | `#FF6F00` |
+| June | Vibrant purple | `#D500F9` |
+| July | Royal blue | `#2979FF` |
+| August | Vibrant pink | `#FF4081` |
+| September | Bright teal | `#1DE9B6` |
+| October | Flaming orange | `#FF9100` |
+| November | Deep violet | `#651FFF` |
+| December | Intense magenta | `#F50057` |
 
-**Oceano**: `#6BB6FF` (azul claro)
-**Países não explorados**: `#F5F5F5` (cinza claro)
+**Ocean**: `#6BB6FF` (light blue)
+**Unexplored countries**: `#F5F5F5` (light gray)
 
-## 🧪 Testes
+## 🧪 Testing
 
-### Testar API DEV
+### Test DEV API
 
 ```bash
-# Testar todos os endpoints
+# Test all endpoints
 make test
 
-# Popular com dados aleatórios (20 países)
+# Populate with random data (20 countries)
 make seed
 
-# Limpar banco
+# Clear database
 make clear
 
-# Testar webhook com payload de exemplo
+# Test webhook with sample payload
 make webhook-test
 
-# Ou manualmente:
-# Limpar banco
-curl -X POST https://api.dev.mundotalendo.com.br/clear
+# Or manually:
+# Clear database
+curl -X POST https://api.dev.mundotalendo.com.br/clear \
+  -H "X-API-Key: your-key-here"
 
-# Popular com dados aleatórios
+# Populate with random data
 curl -X POST https://api.dev.mundotalendo.com.br/test/seed \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key-here" \
   -d '{"count": 20}'
 
-# Ver estatísticas
-curl https://api.dev.mundotalendo.com.br/stats | jq .
+# View statistics
+curl https://api.dev.mundotalendo.com.br/stats \
+  -H "X-API-Key: your-key-here" | jq .
 ```
 
-## 📊 Monitoramento
+## 📊 Monitoring
 
 ### CloudWatch Logs
 
 ```bash
-# Com Makefile (recomendado)
-make logs-webhook   # Logs do webhook em tempo real
-make logs-stats     # Logs do stats em tempo real
+# With Makefile (recommended)
+make logs-webhook   # Real-time webhook logs
+make logs-stats     # Real-time stats logs
 
-# Ver informações dos recursos AWS
+# View AWS resource information
 make info
 
-# Ou manualmente:
+# Or manually:
 # Stats Lambda
 aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteNodhexHandlerFunction --follow --region us-east-2
 
@@ -453,76 +458,73 @@ aws logs tail /aws/lambda/mundotalendo-dev-ApiRouteBahodaHandlerFunction --follo
 ### DynamoDB Tables
 
 ```bash
-# Ver todas as tabelas do projeto
+# View all project tables
 make info
 
-# Ou manualmente:
-# Ver tabelas
+# Or manually:
+# View tables
 aws dynamodb list-tables --region us-east-2 | grep mundotalendo
 
-# Scan Leituras
-aws dynamodb scan --table-name <nome-tabela-leituras> --region us-east-2
-
-# Scan Falhas
-aws dynamodb scan --table-name <nome-tabela-falhas> --region us-east-2
+# Scan DataTable
+aws dynamodb scan --table-name <datatable-name> --region us-east-2
 ```
 
 ## 🔧 Troubleshooting
 
-### Mapa não carrega
-1. Verificar `NEXT_PUBLIC_API_URL` em `.env.local`
-2. Verificar se API está respondendo: `curl https://api.dev.mundotalendo.com.br/stats`
-3. Verificar console do browser (F12)
+### Map doesn't load
+1. Check `NEXT_PUBLIC_API_URL` in `.env.local`
+2. Check if API is responding: `curl https://api.dev.mundotalendo.com.br/stats`
+3. Check browser console (F12)
 
-### Stats retorna erro
-1. Verificar se Lambdas têm variável `SST_Resource_Leituras_name`
-2. Ver logs no CloudWatch
-3. Verificar se tabela DynamoDB existe
+### Stats returns error
+1. Check if Lambdas have `SST_Resource_DataTable_name` variable
+2. View CloudWatch logs
+3. Check if DynamoDB table exists
 
-### Webhook não processa
-1. Validar JSON payload
-2. Verificar `identificador = "maratona-lendo-paises"`
-3. Verificar se país existe no mapeamento (208 países)
-4. Consultar tabela Falhas para ver erros
+### Webhook doesn't process
+1. Validate JSON payload
+2. Check `identificador = "maratona-lendo-paises"`
+3. Check if country exists in mapping (208 countries)
+4. Query Failures table to see errors
 
-### Deploy SST falha
-1. Verificar credenciais AWS: `aws sts get-caller-identity`
-2. Verificar `go.mod` em cada função Lambda
-3. Consultar CLAUDE.md para workarounds conhecidos
+### SST deploy fails
+1. Check AWS credentials: `aws sts get-caller-identity`
+2. Check `go.mod` in each Lambda function
+3. Consult CLAUDE.md for known workarounds
 
-## 📚 Documentação Adicional
+## 📚 Additional Documentation
 
-- **CLAUDE.md** - Contexto técnico completo, histórico de decisões, bugs conhecidos
-- **project.md** - Especificação original do projeto
+- **CLAUDE.md** - Complete technical context, decision history, known bugs
+- **project.md** - Original project specification
 - **SST Docs** - https://sst.dev/docs
 
-## 🤝 Contribuindo
+## 🤝 Contributing
 
-1. Fork o projeto
-2. Crie uma branch feature (`git checkout -b feature/nova-feature`)
-3. Commit com mensagens descritivas (`git commit -m 'Add: nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Abra um Pull Request
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Commit with descriptive messages (`git commit -m 'Add: new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
+5. Open a Pull Request
 
-### Convenção de Commits
+### Commit Convention
 
-- `Add:` - Nova funcionalidade
-- `Update:` - Atualização de funcionalidade existente
-- `Fix:` - Correção de bug
-- `Refactor:` - Refatoração de código
-- `Docs:` - Atualização de documentação
-- `Style:` - Formatação, lint
-- `Test:` - Adicionar/atualizar testes
+- `Add:` - New feature
+- `Update:` - Update to existing feature
+- `Fix:` - Bug fix
+- `Refactor:` - Code refactoring
+- `Docs:` - Documentation update
+- `Style:` - Formatting, lint
+- `Test:` - Add/update tests
 
-## 📄 Licença
+## 📄 License
 
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
+This project is under the MIT license. See the LICENSE file for more details.
 
-## 👥 Autor
+## 👥 Author
 
 **Daniel Balieiro**
 - GitHub: [@danielbalieiro](https://github.com/danielbalieiro)
 
 ---
 
-**🌍 Descubra o mundo através da leitura!**
+**🌍 Discover the world through reading!**
