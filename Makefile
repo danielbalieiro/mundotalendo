@@ -73,31 +73,63 @@ dev: ## Start local Next.js server
 	@echo "$(GREEN)Starting local server...$(NC)"
 	@npm run dev:local
 
-# API Testing
+# API Testing (requires API key)
+get-api-key: ## Get first active API key for testing
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
+		--filter-expression "begins_with(PK, :pk) AND #active = :active" \
+		--expression-attribute-names '{"#active":"active"}' \
+		--expression-attribute-values '{":pk":{"S":"APIKEY#"},":active":{"BOOL":true}}' \
+		--query 'Items[0].key.S' --output text
+
 test: ## Test dev API endpoints
 	@echo "$(GREEN)Testing DEV API...$(NC)"
-	@echo "\n$(YELLOW)GET /stats:$(NC)"
-	@curl -s $(API_DEV)/stats | jq .
-	@echo "\n$(YELLOW)Available endpoints:$(NC)"
-	@echo "  - GET  $(API_DEV)/stats"
-	@echo "  - POST $(API_DEV)/webhook"
-	@echo "  - POST $(API_DEV)/test/seed"
-	@echo "  - POST $(API_DEV)/clear"
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(YELLOW)Using API key: $$API_KEY$(NC)"; \
+	echo "\n$(YELLOW)GET /stats:$(NC)"; \
+	curl -s $(API_DEV)/stats -H "X-API-Key: $$API_KEY" | jq .; \
+	echo "\n$(YELLOW)Available endpoints:$(NC)"; \
+	echo "  - GET  $(API_DEV)/stats"; \
+	echo "  - POST $(API_DEV)/webhook"; \
+	echo "  - POST $(API_DEV)/test/seed"; \
+	echo "  - POST $(API_DEV)/clear"
 
 seed: ## Populate database with random data (count=20)
 	@echo "$(GREEN)Populating database...$(NC)"
-	@curl -s -X POST $(API_DEV)/test/seed \
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	curl -s -X POST $(API_DEV)/test/seed \
 		-H "Content-Type: application/json" \
+		-H "X-API-Key: $$API_KEY" \
 		-d '{"count": 20}' | jq .
 
 clear: ## Clear all database tables
 	@echo "$(RED)Clearing database...$(NC)"
-	@curl -s -X POST $(API_DEV)/clear | jq .
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	curl -s -X POST $(API_DEV)/clear \
+		-H "X-API-Key: $$API_KEY" | jq .
 
 webhook-test: ## Test webhook with sample payload
 	@echo "$(GREEN)Testing webhook...$(NC)"
-	@curl -s -X POST $(API_DEV)/webhook \
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	curl -s -X POST $(API_DEV)/webhook \
 		-H "Content-Type: application/json" \
+		-H "X-API-Key: $$API_KEY" \
 		-d '{ \
 			"perfil": {"nome": "Test User", "link": "https://test.com"}, \
 			"maratona": {"nome": "Test", "identificador": "maratona-lendo-paises"}, \
@@ -152,12 +184,12 @@ list-lambdas: ## List all Lambda functions with their env vars
 	@echo "$(GREEN)All Lambda Functions:$(NC)"
 	@for fn in $$(aws lambda list-functions --region $(REGION) --query 'Functions[?contains(FunctionName, `mundotalendo-dev-ApiRoute`)].FunctionName' --output text); do \
 		echo "\n$(YELLOW)$$fn:$(NC)"; \
-		aws lambda get-function-configuration --function-name $$fn --region $(REGION) --query 'Environment.Variables' --output json | jq -c '. | {Leituras: .SST_Resource_Leituras_name, Falhas: .SST_Resource_Falhas_name}'; \
+		aws lambda get-function-configuration --function-name $$fn --region $(REGION) --query 'Environment.Variables' --output json | jq -c '. | {DataTable: .SST_Resource_DataTable_name}'; \
 	done
 
 check-failures: ## Show recent failures from Falhas table
 	@echo "$(GREEN)Recent failures (last 10):$(NC)"
-	@FALHAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-Falhas`)]' --output text); \
+	@FALHAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
 	if [ -n "$$FALHAS_TABLE" ]; then \
 		aws dynamodb scan --table-name $$FALHAS_TABLE --region $(REGION) --max-items 10 | jq -r '.Items[] | "\(.SK.S): \(.ErrorType.S) - \(.ErrorMessage.S)"'; \
 	else \
@@ -166,21 +198,66 @@ check-failures: ## Show recent failures from Falhas table
 
 fix-env: ## Fix Lambda environment variables (SST bug workaround)
 	@echo "$(YELLOW)Fixing Lambda environment variables...$(NC)"
-	@LEITURAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-Leituras`)]' --output text); \
-	FALHAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-Falhas`)]' --output text); \
-	echo "$(GREEN)Found tables:$(NC)"; \
-	echo "  Leituras: $$LEITURAS_TABLE"; \
-	echo "  Falhas: $$FALHAS_TABLE"; \
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	echo "$(GREEN)Found table:$(NC)"; \
+	echo "  DataTable: $$DATA_TABLE"; \
 	echo "\n$(YELLOW)Updating Lambda functions...$(NC)"; \
 	for fn in $$(aws lambda list-functions --region $(REGION) --query 'Functions[?contains(FunctionName, `mundotalendo-dev-ApiRoute`)].FunctionName' --output text); do \
 		echo "  Updating $$fn..."; \
 		aws lambda update-function-configuration \
 			--function-name $$fn \
 			--region $(REGION) \
-			--environment "Variables={SST_Resource_Leituras_name=$$LEITURAS_TABLE,SST_Resource_Falhas_name=$$FALHAS_TABLE}" \
+			--environment "Variables={SST_Resource_DataTable_name=$$DATA_TABLE}" \
 			--output text --query 'FunctionName' 2>&1 | grep -v "An error occurred" || true; \
 	done; \
 	echo "\n$(GREEN)Environment variables updated!$(NC)"
+
+# API Key Management
+create-api-key: ## Create new API key (make create-api-key name=myapp)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Use 'make create-api-key name=yourname'$(NC)"; \
+		exit 1; \
+	fi
+	@LEITURAS_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	UUID=$$(uuidgen | tr '[:upper:]' '[:lower:]'); \
+	DATE=$$(date +%Y-%m-%d); \
+	API_KEY="$(name)-$$UUID-$$DATE"; \
+	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "$(GREEN)Creating API key...$(NC)"; \
+	aws dynamodb put-item --region $(REGION) --table-name $$LEITURAS_TABLE \
+		--item '{"PK":{"S":"APIKEY#$(name)"},"SK":{"S":"KEY#'$$UUID'"},"name":{"S":"$(name)"},"key":{"S":"'$$API_KEY'"},"createdAt":{"S":"'$$TIMESTAMP'"},"active":{"BOOL":true}}' \
+		--output text > /dev/null 2>&1; \
+	echo "$(GREEN)API Key created:$(NC)"; \
+	echo "$(YELLOW)$$API_KEY$(NC)"; \
+	echo "\nAdd to your .env.local:"; \
+	echo "NEXT_PUBLIC_API_KEY=$$API_KEY"
+
+list-api-keys: ## List all API keys
+	@echo "$(GREEN)Active API Keys:$(NC)"
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
+		--filter-expression "begins_with(PK, :pk)" \
+		--expression-attribute-values '{":pk":{"S":"APIKEY#"}}' \
+		--query 'Items[].{Name:name.S,Key:key.S,Created:createdAt.S,Active:active.BOOL}' \
+		--output table
+
+delete-api-key: ## Delete API key (make delete-api-key name=myapp)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Use 'make delete-api-key name=yourname'$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Deleting API key for: $(name)$(NC)"; \
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	ITEMS=$$(aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
+		--filter-expression "PK = :pk" \
+		--expression-attribute-values '{":pk":{"S":"APIKEY#$(name)"}}' \
+		--query 'Items[].SK.S' --output text); \
+	for SK in $$ITEMS; do \
+		aws dynamodb delete-item --region $(REGION) --table-name $$DATA_TABLE \
+			--key '{"PK":{"S":"APIKEY#$(name)"},"SK":{"S":"'$$SK'"}}' \
+			--output text > /dev/null 2>&1; \
+		echo "$(GREEN)Deleted: $(name)$(NC)"; \
+	done
 
 # Git
 commit: ## Quick commit (make commit m="message")

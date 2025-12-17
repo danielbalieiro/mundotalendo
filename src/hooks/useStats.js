@@ -6,7 +6,15 @@ import useSWR from 'swr'
  * @returns {Promise<Object>} JSON response
  */
 const fetcher = async (url) => {
-  const response = await fetch(url)
+  const headers = {}
+
+  // Add API key if configured
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
+  }
+
+  const response = await fetch(url, { headers })
   if (!response.ok) {
     throw new Error('Failed to fetch stats')
   }

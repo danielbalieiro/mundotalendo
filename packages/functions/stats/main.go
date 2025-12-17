@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/types"
 )
 
@@ -27,11 +28,28 @@ func init() {
 		log.Fatalf("unable to load SDK config, %v", err)
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	tableName = os.Getenv("SST_Resource_Leituras_name")
+	tableName = os.Getenv("SST_Resource_DataTable_name")
 }
 
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Println("Fetching stats from DynamoDB")
+
+	// Validate API key
+	apiKey := request.Headers["x-api-key"]
+	if apiKey == "" {
+		apiKey = request.Headers["X-API-Key"]
+	}
+	if !auth.ValidateAPIKey(ctx, dynamoClient, apiKey) {
+		log.Printf("Unauthorized: invalid API key")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 401,
+			Headers: map[string]string{
+				"Content-Type":                "application/json",
+				"Access-Control-Allow-Origin": "*",
+			},
+			Body: `{"error":"UNAUTHORIZED","message":"Invalid or missing API key"}`,
+		}, nil
+	}
 
 	// Query DynamoDB for all readings
 	result, err := dynamoClient.Query(ctx, &dynamodb.QueryInput{

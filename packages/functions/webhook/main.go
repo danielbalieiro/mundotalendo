@@ -13,14 +13,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/mapping"
 	"github.com/mundotalendo/functions/types"
 )
 
 var (
-	dynamoClient    *dynamodb.Client
-	tableName       string
-	falhasTableName string
+	dynamoClient *dynamodb.Client
+	tableName    string
 )
 
 func init() {
@@ -29,12 +29,28 @@ func init() {
 		log.Fatalf("unable to load SDK config, %v", err)
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	tableName = os.Getenv("SST_Resource_Leituras_name")
-	falhasTableName = os.Getenv("SST_Resource_Falhas_name")
+	tableName = os.Getenv("SST_Resource_DataTable_name")
 }
 
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Printf("Received webhook request: %s", request.Body)
+
+	// Validate API key
+	apiKey := request.Headers["x-api-key"]
+	if apiKey == "" {
+		// Try lowercase header
+		apiKey = request.Headers["X-API-Key"]
+	}
+	if !auth.ValidateAPIKey(ctx, dynamoClient, apiKey) {
+		log.Printf("Unauthorized: invalid API key")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 401,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"UNAUTHORIZED","message":"Invalid or missing API key"}`,
+		}, nil
+	}
 
 	// Parse the webhook payload
 	var payload types.WebhookPayload
@@ -238,8 +254,8 @@ func errorResponse(statusCode int, message string) events.APIGatewayV2HTTPRespon
 }
 
 func saveToFalhas(ctx context.Context, errorType, errorMessage, originalPayload string) {
-	if falhasTableName == "" {
-		log.Printf("ERROR: falhasTableName is empty - cannot save to Falhas table")
+	if tableName == "" {
+		log.Printf("ERROR: tableName is empty - cannot save failure")
 		return
 	}
 
@@ -252,7 +268,7 @@ func saveToFalhas(ctx context.Context, errorType, errorMessage, originalPayload 
 		OriginalPayload: originalPayload,
 	}
 
-	log.Printf("Saving failure to table: %s (ErrorType: %s)", falhasTableName, errorType)
+	log.Printf("Saving failure to table: %s (ErrorType: %s)", tableName, errorType)
 
 	av, err := attributevalue.MarshalMap(item)
 	if err != nil {
@@ -261,13 +277,13 @@ func saveToFalhas(ctx context.Context, errorType, errorMessage, originalPayload 
 	}
 
 	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &falhasTableName,
+		TableName: &tableName,
 		Item:      av,
 	})
 	if err != nil {
-		log.Printf("ERROR saving to Falhas table: %v", err)
+		log.Printf("ERROR saving failure: %v", err)
 	} else {
-		log.Printf("Successfully saved failure to Falhas table")
+		log.Printf("Successfully saved failure")
 	}
 }
 

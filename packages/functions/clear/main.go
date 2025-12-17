@@ -13,12 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/mundotalendo/functions/auth"
 )
 
 var (
-	dynamoClient  *dynamodb.Client
-	leiturasTable string
-	falhasTable   string
+	dynamoClient *dynamodb.Client
+	tableName    string
 )
 
 func init() {
@@ -27,8 +27,7 @@ func init() {
 		log.Fatalf("unable to load SDK config, %v", err)
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	leiturasTable = os.Getenv("SST_Resource_Leituras_name")
-	falhasTable = os.Getenv("SST_Resource_Falhas_name")
+	tableName = os.Getenv("SST_Resource_DataTable_name")
 }
 
 func clearTable(ctx context.Context, tableName, pk string) (int, error) {
@@ -71,24 +70,41 @@ func clearTable(ctx context.Context, tableName, pk string) (int, error) {
 }
 
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	log.Println("Clearing all tables")
+	log.Println("Clearing all data from table")
 
-	leiturasDeleted, err := clearTable(ctx, leiturasTable, "EVENT#LEITURA")
-	if err != nil {
-		log.Printf("Error clearing Leituras: %v", err)
+	// Validate API key
+	apiKey := request.Headers["x-api-key"]
+	if apiKey == "" {
+		apiKey = request.Headers["X-API-Key"]
+	}
+	if !auth.ValidateAPIKey(ctx, dynamoClient, apiKey) {
+		log.Printf("Unauthorized: invalid API key")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 401,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"UNAUTHORIZED","message":"Invalid or missing API key"}`,
+		}, nil
 	}
 
-	falhasDeleted := 0
-	errorTypes := []string{"COUNTRY_NOT_MAPPED", "METADATA_MARSHAL_ERROR"}
+	eventsDeleted, err := clearTable(ctx, tableName, "EVENT#LEITURA")
+	if err != nil {
+		log.Printf("Error clearing events: %v", err)
+	}
+
+	errorsDeleted := 0
+	errorTypes := []string{"COUNTRY_NOT_FOUND", "METADATA_MARSHAL_ERROR", "DYNAMODB_MARSHAL_ERROR", "DYNAMODB_PUT_ERROR"}
 	for _, errorType := range errorTypes {
-		count, _ := clearTable(ctx, falhasTable, "ERROR#"+errorType)
-		falhasDeleted += count
+		count, _ := clearTable(ctx, tableName, "ERROR#"+errorType)
+		errorsDeleted += count
 	}
 
 	response := map[string]interface{}{
-		"success":         true,
-		"leiturasDeleted": leiturasDeleted,
-		"falhasDeleted":   falhasDeleted,
+		"success":        true,
+		"eventsDeleted":  eventsDeleted,
+		"errorsDeleted":  errorsDeleted,
+		"totalDeleted":   eventsDeleted + errorsDeleted,
 	}
 
 	responseBody, _ := json.Marshal(response)

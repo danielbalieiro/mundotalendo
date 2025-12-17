@@ -34,10 +34,10 @@ Este é um projeto **colaborativo** sobre **descobrir culturas** através da lei
 ### Backend (Serverless)
 - **Runtime**: Go 1.23+ (ARM64/Graviton)
 - **Platform**: AWS Lambda
-- **Database**: DynamoDB (2 tabelas)
-  - `Leituras` - Eventos de leitura com progresso
-  - `Falhas` - Log de erros para análise
+- **Database**: DynamoDB (Single Table Design)
+  - `DataTable` - Events, errors, and API keys with partition key prefixes
 - **API**: API Gateway V2 (HTTP API)
+- **Authentication**: API Key via X-API-Key header
 - **Region**: us-east-2 (Ohio)
 
 ### Frontend
@@ -97,6 +97,8 @@ mundotalendo/
 
 ## 🔌 API Endpoints
 
+**⚠️ All endpoints require authentication via `X-API-Key` header.**
+
 ### `POST /webhook`
 Recebe eventos de leitura do Maratona.app
 
@@ -135,6 +137,7 @@ Recebe eventos de leitura do Maratona.app
 **Error Codes:**
 | Code | Description |
 |------|-------------|
+| `UNAUTHORIZED` | Invalid or missing API key |
 | `UNMARSHAL_ERROR` | Failed to parse JSON payload |
 | `COUNTRY_NOT_FOUND` | Country name not found in ISO mapping table |
 | `METADATA_MARSHAL_ERROR` | Failed to serialize metadata |
@@ -200,10 +203,50 @@ Limpa todas as tabelas (desenvolvimento)
 ```json
 {
   "success": true,
-  "leiturasDeleted": 15,
-  "falhasDeleted": 3
+  "eventsDeleted": 15,
+  "errorsDeleted": 3,
+  "totalDeleted": 18
 }
 ```
+
+## 🔐 API Key Authentication
+
+All API endpoints require authentication using an API key passed via the `X-API-Key` header.
+
+### Creating API Keys
+
+```bash
+# Create a new API key
+make create-api-key name=frontend
+
+# Output example:
+# frontend-7665ec5b-c42e-4baa-93ef-c7247199b11f-2025-12-17
+```
+
+### Managing API Keys
+
+```bash
+# List all API keys
+make list-api-keys
+
+# Delete an API key
+make delete-api-key name=frontend
+```
+
+### Using API Keys
+
+**In requests:**
+```bash
+curl https://api.dev.mundotalendo.com.br/stats \
+  -H "X-API-Key: your-api-key-here"
+```
+
+**In frontend (.env.local):**
+```bash
+NEXT_PUBLIC_API_KEY=frontend-uuid-date
+```
+
+The frontend automatically includes the API key in all requests when configured.
 
 ## 🚀 Setup Local
 
@@ -260,6 +303,11 @@ make webhook-test   # Testa webhook com payload de exemplo
 make logs-webhook   # Logs do webhook Lambda
 make logs-stats     # Logs do stats Lambda
 
+# API Key Management
+make create-api-key name=myapp  # Cria nova API key
+make list-api-keys              # Lista todas as keys
+make delete-api-key name=myapp  # Remove uma key
+
 # Utilidades
 make info           # Mostra recursos AWS
 make unlock         # Desbloqueia deploy travado
@@ -267,14 +315,20 @@ make unlock         # Desbloqueia deploy travado
 
 ### Configuração
 
-Crie `.env.local`:
+Copie o template de configuração:
 
 ```bash
-# Desenvolvimento com API AWS (recomendado)
+cp .env.local.example .env.local
+```
+
+Edite `.env.local`:
+
+```bash
+# AWS API Gateway URL (obtenha após deploy)
 NEXT_PUBLIC_API_URL=https://api.dev.mundotalendo.com.br
 
-# OU desenvolvimento com mock local
-# NEXT_PUBLIC_API_URL=/api
+# API Key (crie com: make create-api-key name=frontend)
+NEXT_PUBLIC_API_KEY=frontend-uuid-date
 ```
 
 ### Desenvolvimento

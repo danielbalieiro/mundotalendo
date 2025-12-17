@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/mapping"
 	"github.com/mundotalendo/functions/types"
 )
@@ -29,7 +30,7 @@ func init() {
 		log.Fatalf("unable to load SDK config, %v", err)
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	tableName = os.Getenv("SST_Resource_Leituras_name")
+	tableName = os.Getenv("SST_Resource_DataTable_name")
 	rand.Seed(time.Now().UnixNano())
 }
 
@@ -44,6 +45,22 @@ func getAllCountries() []string {
 
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Println("Seeding database with random countries")
+
+	// Validate API key
+	apiKey := request.Headers["x-api-key"]
+	if apiKey == "" {
+		apiKey = request.Headers["X-API-Key"]
+	}
+	if !auth.ValidateAPIKey(ctx, dynamoClient, apiKey) {
+		log.Printf("Unauthorized: invalid API key")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 401,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"UNAUTHORIZED","message":"Invalid or missing API key"}`,
+		}, nil
+	}
 
 	// Parse request for count (default 10)
 	count := 10

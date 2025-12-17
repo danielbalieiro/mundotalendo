@@ -14,20 +14,11 @@ export default $config({
     };
   },
   async run() {
-    // DynamoDB Table for reading telemetry
-    const table = new sst.aws.Dynamo("Leituras", {
+    // DynamoDB Single Table for all data (events, errors, API keys)
+    const dataTable = new sst.aws.Dynamo("DataTable", {
       fields: {
-        PK: "string",
-        SK: "string",
-      },
-      primaryIndex: { hashKey: "PK", rangeKey: "SK" },
-    });
-
-    // DynamoDB Table for failed webhooks
-    const falhasTable = new sst.aws.Dynamo("Falhas", {
-      fields: {
-        PK: "string",  // "ERROR#<errorType>"
-        SK: "string",  // "TIMESTAMP#<RFC3339>"
+        PK: "string",  // Partition key: EVENT#*, ERROR#*, APIKEY#*
+        SK: "string",  // Sort key: TIMESTAMP#*, KEY#*
       },
       primaryIndex: { hashKey: "PK", rangeKey: "SK" },
     });
@@ -57,7 +48,7 @@ export default $config({
       handler: "packages/functions/webhook",
       runtime: "go",
       architecture: "arm64",
-      link: [table, falhasTable],
+      link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
     });
@@ -66,7 +57,7 @@ export default $config({
       handler: "packages/functions/seed",
       runtime: "go",
       architecture: "arm64",
-      link: [table],
+      link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
     });
@@ -75,7 +66,7 @@ export default $config({
       handler: "packages/functions/stats",
       runtime: "go",
       architecture: "arm64",
-      link: [table],
+      link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
     });
@@ -84,7 +75,7 @@ export default $config({
       handler: "packages/functions/clear",
       runtime: "go",
       architecture: "arm64",
-      link: [table, falhasTable],
+      link: [dataTable],
       timeout: "60 seconds",
       memory: "512 MB",
     });
@@ -112,7 +103,7 @@ export default $config({
     return {
       api: api.url,
       web: web.url,
-      table: table.name,
+      dataTable: dataTable.name,
     };
   },
 });

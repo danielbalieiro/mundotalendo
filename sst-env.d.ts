@@ -9,11 +9,7 @@ declare module "sst" {
       "type": "sst.aws.ApiGatewayV2"
       "url": string
     }
-    "Falhas": {
-      "name": string
-      "type": "sst.aws.Dynamo"
-    }
-    "Leituras": {
+    "DataTable": {
       "name": string
       "type": "sst.aws.Dynamo"
     }
