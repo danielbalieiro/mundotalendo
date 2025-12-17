@@ -40,6 +40,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	var payload types.WebhookPayload
 	if err := json.Unmarshal([]byte(request.Body), &payload); err != nil {
 		log.Printf("Error parsing payload: %v", err)
+		saveToFalhas(ctx, "UNMARSHAL_ERROR", fmt.Sprintf("Failed to parse JSON: %v", err), request.Body)
 		return errorResponse(400, "Invalid JSON payload"), nil
 	}
 
@@ -72,8 +73,16 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			if vinculado.Progresso > maxProgress {
 				maxProgress = vinculado.Progresso
 			}
-			if vinculado.UpdatedAt.After(latestUpdate) {
-				latestUpdate = vinculado.UpdatedAt
+			// Parse UpdatedAt string to time.Time
+			if vinculado.UpdatedAt != "" {
+				parsedTime, err := time.Parse("2006-01-02", vinculado.UpdatedAt)
+				if err != nil {
+					// Try RFC3339 format
+					parsedTime, err = time.Parse(time.RFC3339, vinculado.UpdatedAt)
+				}
+				if err == nil && parsedTime.After(latestUpdate) {
+					latestUpdate = parsedTime
+				}
 			}
 		}
 
@@ -81,6 +90,11 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		if len(desafio.Vinculados) == 0 {
 			maxProgress = 0
 			latestUpdate = time.Now()
+		}
+
+		// If concluido == true, force progress to 100%
+		if desafio.Concluido {
+			maxProgress = 100
 		}
 
 		// Convert country name to ISO code

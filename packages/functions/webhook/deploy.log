@@ -1,0 +1,8 @@
+SST 3.17.25  ready!
+
+➜  App:        mundotalendo
+   Stage:      dev
+
+~  Deploy
+
+|  Locked      A concurrent update was detected on the app. Run `sst unlock` to remove the lock and try again.

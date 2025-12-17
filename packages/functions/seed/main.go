@@ -101,7 +101,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 				Tipo:      "leitura",
 				Vinculados: []types.Vinculado{{
 					Progresso: randomProgress,
-					UpdatedAt: timestamp,
+					UpdatedAt: timestamp.Format(time.RFC3339),
 				}},
 			}},
 		}

@@ -1,7 +1,5 @@
 package types
 
-import "time"
-
 // Webhook payload structures
 type Maratona struct {
 	Nome          string `json:"nome"`
@@ -20,6 +18,7 @@ type Perfil struct {
 }
 
 type Desafio struct {
+	ID         string      `json:"id,omitempty"`
 	Descricao  string      `json:"descricao"`
 	Categoria  string      `json:"categoria"`
 	Concluido  bool        `json:"concluido"`
@@ -27,10 +26,21 @@ type Desafio struct {
 	Vinculados []Vinculado `json:"vinculados"`
 }
 
+type Edicao struct {
+	Titulo string `json:"titulo,omitempty"`
+	Autor  string `json:"autor,omitempty"`
+	Capa   string `json:"capa,omitempty"`
+}
+
 type Vinculado struct {
-	Completo  bool      `json:"completo"`
-	Progresso int       `json:"progresso"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID         string  `json:"id,omitempty"`
+	Completo   bool    `json:"completo"`
+	Progresso  int     `json:"progresso"`
+	Avaliacao  int     `json:"avaliacao,omitempty"`
+	Comentario string  `json:"comentario,omitempty"`
+	UpdatedAt  string  `json:"updatedAt"`
+	Edicao     *Edicao `json:"edicao,omitempty"`
+	DiaMarcado string  `json:"diaMarcado,omitempty"`
 }
 
 // DynamoDB item structure
