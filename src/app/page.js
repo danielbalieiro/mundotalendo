@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { months } from '@/config/months'
 
 // Dynamically import Map component (client-side only)
@@ -21,39 +23,69 @@ const Map = dynamic(() => import('@/components/Map'), {
  * @returns {JSX.Element}
  */
 export default function Home() {
+  const [isLegendVisible, setIsLegendVisible] = useState(false)
+
   return (
     <main className="relative h-screen w-screen overflow-hidden">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/70 to-transparent p-6">
-        <h1 className="text-3xl md:text-4xl font-bold text-white">
-          Mundo Tá Lendo 2026
-        </h1>
+      <div className="absolute top-0 left-0 right-0 z-10 p-6">
+        <Image
+          src="/mundotalendo.png"
+          alt="Mundo Tá Lendo 2026"
+          width={300}
+          height={60}
+          priority
+          className="h-12 md:h-16 w-auto"
+        />
       </div>
 
       {/* Map */}
       <Map />
 
-      {/* Legend */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/70 to-transparent p-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-white font-semibold mb-3 text-sm md:text-base">
-            Meses do Desafio
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-            {months.map((month) => (
-              <div
-                key={month.name}
-                className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded px-3 py-2"
-              >
+      {/* Legend with Toggle */}
+      <div className="absolute bottom-0 left-0 right-0 z-10">
+        <div
+          className={`bg-gradient-to-t from-black/70 to-transparent transition-all duration-300 ease-in-out ${
+            isLegendVisible ? 'p-4' : 'p-2'
+          }`}
+        >
+          <div className="max-w-6xl mx-auto">
+            {/* Toggle Button */}
+            <button
+              onClick={() => setIsLegendVisible(!isLegendVisible)}
+              className="flex items-center gap-2 text-white font-semibold mb-3 text-sm md:text-base hover:text-blue-300 transition-colors cursor-pointer"
+              aria-label={isLegendVisible ? 'Ocultar meses' : 'Mostrar meses'}
+              aria-expanded={isLegendVisible}
+            >
+              <span>Meses do Desafio</span>
+              <span className="text-xs">
+                {isLegendVisible ? '▼' : '▶'}
+              </span>
+            </button>
+
+            {/* Legend Grid with Animation */}
+            <div
+              className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 transition-all duration-300 ease-in-out overflow-hidden ${
+                isLegendVisible
+                  ? 'opacity-100 max-h-96'
+                  : 'opacity-0 max-h-0'
+              }`}
+            >
+              {months.map((month) => (
                 <div
-                  className="w-4 h-4 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: month.color }}
-                />
-                <span className="text-white text-xs md:text-sm">
-                  {month.name}
-                </span>
-              </div>
-            ))}
+                  key={month.name}
+                  className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded px-3 py-2"
+                >
+                  <div
+                    className="w-4 h-4 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: month.color }}
+                  />
+                  <span className="text-white text-xs md:text-sm">
+                    {month.name}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

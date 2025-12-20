@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import { useStats } from '@/hooks/useStats'
-import { getCountryColorMap, getMonthByCountry } from '@/config/months'
+import { getMonthByCountry, months } from '@/config/months'
 import { getCountryName, countryNames } from '@/config/countries'
 import { countryCentroids } from '@/config/countryCentroids'
+import { getCountryProgressColor, getTierLabel } from '@/utils/colorTiers'
 
 /**
  * Build GeoJSON FeatureCollection with country centroids and Portuguese names
@@ -48,8 +49,6 @@ export default function Map() {
       return
     }
 
-    const colorMap = getCountryColorMap()
-
     // If no countries, just use a solid color
     if (countries.length === 0) {
       map.current.setPaintProperty('country-fills', 'fill-color', '#F5F5F5')
@@ -58,29 +57,23 @@ export default function Map() {
     }
 
     const colorExpression = ['match', ['get', 'ADM0_A3']]
-    const opacityExpression = ['match', ['get', 'ADM0_A3']]
 
-    // Add colors and opacity for countries being explored
+    // Add tier-based colors for countries being explored
     countries.forEach((countryData) => {
       const iso = countryData.iso3
       const progress = countryData.progress
 
-      if (colorMap[iso]) {
-        colorExpression.push(iso, colorMap[iso])
-      }
-
-      // Formula: 0.3 + (progress/100) * 0.7
-      // progress 0 → 0.3, progress 100 → 1.0
-      const opacity = 0.3 + (progress / 100) * 0.7
-      opacityExpression.push(iso, opacity)
+      // Get tier-based color instead of applying opacity
+      const tierColor = getCountryProgressColor(iso, progress, months)
+      colorExpression.push(iso, tierColor)
     })
 
-    // Default values for non-explored countries
+    // Default color for non-explored countries
     colorExpression.push('#F5F5F5')
-    opacityExpression.push(0.9)
 
+    // Apply solid colors (no opacity variation)
     map.current.setPaintProperty('country-fills', 'fill-color', colorExpression)
-    map.current.setPaintProperty('country-fills', 'fill-opacity', opacityExpression)
+    map.current.setPaintProperty('country-fills', 'fill-opacity', 0.9) // Solid opacity for all
   }, [countries]) // Re-create function when countries changes
 
   // Initialize map
@@ -258,8 +251,11 @@ export default function Map() {
           <div className="text-sm text-gray-300">
             {getMonthByCountry(hoveredCountry.iso)?.name || 'Sem categoria'}
           </div>
-          <div className="text-sm text-blue-300 font-mono">
-            {hoveredCountry.progress}% completo
+          <div className="text-sm text-blue-300">
+            <span className="font-mono">{hoveredCountry.progress}%</span>
+            <span className="text-xs ml-2 opacity-75">
+              • {getTierLabel(hoveredCountry.progress)}
+            </span>
           </div>
         </div>
       )}

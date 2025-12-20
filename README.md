@@ -19,15 +19,20 @@ This is a **collaborative** project about **discovering cultures** through readi
 ## ✨ Features
 
 - 🗺️ **Interactive map** with MapLibre GL JS showing 193 countries
-- 🎨 **Vibrant colors** - 12 months with distinct colors
-- 📊 **Progress system** - Visual transparency from 0-100%
-  - 0% → 30% opacity (initial discovery)
-  - 100% → 100% opacity (fully explored)
+- 🎨 **5-tier color system** - 60 distinct colors (12 months × 5 progress levels)
+- 📊 **Progress visualization** - Color intensity based on reading progress
+  - Tier 1 (0-20%): Light shade - "Iniciado"
+  - Tier 2 (21-40%): Light - "Em Progresso"
+  - Tier 3 (41-60%): Medium - "No Meio"
+  - Tier 4 (61-80%): Dark - "Quase Completo"
+  - Tier 5 (81-100%): Vibrant full color - "Completo"
+- 🎛️ **Collapsible legend** - Toggle to show/hide month colors (starts hidden)
 - 🔄 **Real-time updates** - Polling every 15s
 - 🇧🇷 **Portuguese labels** - All countries with PT-BR names
 - 📱 **Responsive** - Works on desktop and mobile
-- 🎯 **Interactive tooltip** - Shows progress on hover
+- 🎯 **Interactive tooltip** - Shows country, month, progress % and tier label
 - 🌊 **Lightened ocean** - Pleasant visual design
+- 🖼️ **Logo header** - Mundo Tá Lendo 2026 logo image
 
 ## 🏗️ Architecture
 
@@ -61,19 +66,26 @@ This is a **collaborative** project about **discovering cultures** through readi
 
 ```
 mundotalendo/
+├── public/
+│   └── mundotalendo.png        # Logo image
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── layout.js           # Root layout
-│   │   ├── page.js             # Main page
-│   │   └── globals.css         # Styles + MapLibre CSS
+│   │   ├── page.js             # Main page with collapsible legend
+│   │   ├── globals.css         # Styles + MapLibre CSS
+│   │   └── test-colors/        # Color testing page
+│   │       └── page.js         # Visual validation of 60 color combinations
 │   ├── components/
-│   │   └── Map.jsx             # Interactive map with dynamic transparency
+│   │   ├── Map.jsx             # Interactive map with 5-tier color system
+│   │   └── MapLegend.jsx       # Legacy legend component (not used)
 │   ├── config/
 │   │   ├── countries.js        # 193 countries ISO3 → PT-BR names
 │   │   ├── countryCentroids.js # 1 exact point per country (no duplicates)
-│   │   └── months.js           # 12 months → vibrant colors
-│   └── hooks/
-│       └── useStats.js         # SWR with auto-refresh every 15s
+│   │   └── months.js           # 12 months → 5-tier color gradients (60 colors)
+│   ├── hooks/
+│   │   └── useStats.js         # SWR with auto-refresh every 15s
+│   └── utils/
+│       └── colorTiers.js       # Tier calculation utilities
 ├── packages/functions/         # Go Lambda Functions
 │   ├── types/
 │   │   └── types.go            # Shared structs (WebhookPayload, LeituraItem, etc.)
@@ -395,25 +407,48 @@ npx sst remove --stage prod
 
 ## 🎨 Color System
 
-Each month has a specific vibrant color:
+The project uses a **5-tier color progression system** where each of the 12 months has 5 distinct color shades based on reading progress, totaling **60 unique colors**.
 
-| Month | Color | Hex |
-|-------|-------|-----|
-| January | Vibrant red | `#FF1744` |
-| February | Bright cyan | `#00E5FF` |
-| March | Lemon yellow | `#FFD600` |
-| April | Vibrant green | `#00E676` |
-| May | Intense orange | `#FF6F00` |
-| June | Vibrant purple | `#D500F9` |
-| July | Royal blue | `#2979FF` |
-| August | Vibrant pink | `#FF4081` |
-| September | Bright teal | `#1DE9B6` |
-| October | Flaming orange | `#FF9100` |
-| November | Deep violet | `#651FFF` |
-| December | Intense magenta | `#F50057` |
+### Tier Levels
 
-**Ocean**: `#6BB6FF` (light blue)
-**Unexplored countries**: `#F5F5F5` (light gray)
+| Tier | Progress Range | Description | Visual Intensity |
+|------|----------------|-------------|------------------|
+| **Tier 1** | 0-20% | Iniciado | Lightest shade |
+| **Tier 2** | 21-40% | Em Progresso | Light |
+| **Tier 3** | 41-60% | No Meio | Medium |
+| **Tier 4** | 61-80% | Quase Completo | Dark |
+| **Tier 5** | 81-100% | Completo | Vibrant full color |
+
+### Month Colors (Tier 5 - Full Intensity)
+
+Each month has a distinct base color shown at maximum progress:
+
+| Month | Color | Tier 5 Hex |
+|-------|-------|------------|
+| Janeiro | Vibrant Red | `#FF1744` |
+| Fevereiro | Bright Cyan | `#00E5FF` |
+| Março | Lemon Yellow | `#FFD600` |
+| Abril | Vibrant Green | `#00E676` |
+| Maio | Intense Orange | `#FF6F00` |
+| Junho | Vibrant Purple | `#D500F9` |
+| Julho | Royal Blue | `#2979FF` |
+| Agosto | Vibrant Pink | `#FF4081` |
+| Setembro | Bright Teal | `#1DE9B6` |
+| Outubro | Flaming Orange | `#FF9100` |
+| Novembro | Deep Violet | `#651FFF` |
+| Dezembro | Intense Magenta | `#F50057` |
+
+**Map Elements:**
+- **Ocean**: `#6BB6FF` (light blue)
+- **Unexplored countries**: `#F5F5F5` (light gray)
+
+### Testing Colors
+
+Visit `/test-colors` to see all 60 color combinations with visual validation:
+- 12 months × 5 tiers = 60 distinct colors
+- Visual swatches for each tier level
+- Boundary value testing (0%, 20%, 21%, 40%, etc.)
+- Example: http://localhost:3000/test-colors
 
 ## 🧪 Testing
 
