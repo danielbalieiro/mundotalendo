@@ -27,12 +27,16 @@ This is a **collaborative** project about **discovering cultures** through readi
   - Tier 4 (61-80%): Dark - "Quase Completo"
   - Tier 5 (81-100%): Vibrant full color - "Completo"
 - 🎛️ **Collapsible legend** - Toggle to show/hide month colors (starts hidden)
-- 🔄 **Real-time updates** - Polling every 15s
+- 🔄 **Real-time updates** - Polling every 60s with retry logic
 - 🇧🇷 **Portuguese labels** - All countries with PT-BR names
 - 📱 **Responsive** - Works on desktop and mobile
 - 🎯 **Interactive tooltip** - Shows country, month, progress % and tier label
 - 🌊 **Lightened ocean** - Pleasant visual design
 - 🖼️ **Logo header** - Mundo Tá Lendo 2026 logo image
+- 🛡️ **Error Boundary** - Graceful error handling with reload option
+- 🔁 **Auto-retry** - 3 attempts with exponential backoff on API failures
+- 🔐 **Security headers** - X-Frame-Options, X-Content-Type-Options
+- ⚡ **Performance** - Lambda concurrency limits, DynamoDB pagination, PITR backups
 
 ## 🏗️ Architecture
 
@@ -53,7 +57,8 @@ This is a **collaborative** project about **discovering cultures** through readi
 - **Language**: JavaScript + JSDoc
 - **Styling**: Tailwind CSS v4
 - **Maps**: MapLibre GL JS 5.14.0
-- **Data Fetching**: SWR (polling 15s)
+- **Data Fetching**: SWR (polling 60s, 3 retries, 10s timeout)
+- **Error Handling**: React Error Boundary
 - **Deploy**: CloudFront + S3
 
 ### Infrastructure
@@ -70,22 +75,24 @@ mundotalendo/
 │   └── mundotalendo.png        # Logo image
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── layout.js           # Root layout
+│   │   ├── layout.js           # Root layout with Error Boundary
 │   │   ├── page.js             # Main page with collapsible legend
 │   │   ├── globals.css         # Styles + MapLibre CSS
 │   │   └── test-colors/        # Color testing page
 │   │       └── page.js         # Visual validation of 60 color combinations
 │   ├── components/
 │   │   ├── Map.jsx             # Interactive map with 5-tier color system
+│   │   ├── ErrorBoundary.jsx   # Error boundary for graceful failures
 │   │   └── MapLegend.jsx       # Legacy legend component (not used)
 │   ├── config/
 │   │   ├── countries.js        # 193 countries ISO3 → PT-BR names
 │   │   ├── countryCentroids.js # 1 exact point per country (no duplicates)
 │   │   └── months.js           # 12 months → 5-tier color gradients (60 colors)
 │   ├── hooks/
-│   │   └── useStats.js         # SWR with auto-refresh every 15s
+│   │   └── useStats.js         # SWR with retry logic, 60s polling, 10s timeout
 │   └── utils/
-│       └── colorTiers.js       # Tier calculation utilities
+│       ├── colorTiers.js       # Tier calculation utilities
+│       └── logger.js           # Conditional logging (dev only)
 ├── packages/functions/         # Go Lambda Functions
 │   ├── types/
 │   │   └── types.go            # Shared structs (WebhookPayload, LeituraItem, etc.)
@@ -370,28 +377,33 @@ Access: http://localhost:3000
 ### Deploy to DEV
 
 ```bash
-# With Makefile (recommended - automatically fixes env vars)
+# With Makefile (recommended)
 make deploy-dev
 
-# Or manually (requires fix-env afterward)
+# Or manually
 npx sst deploy --stage dev
-make fix-env  # Required: SST bug workaround for Lambda env vars
 ```
 
 **What happens:**
-1. SST deploys all resources (Lambdas, API Gateway, DynamoDB, CloudFront)
-2. Makefile automatically runs `fix-env` to set `SST_Resource_DataTable_name` on all Lambdas
-3. Outputs URLs for API and frontend
+1. SST builds and compiles all Go Lambda functions
+2. Deploys infrastructure (API Gateway, DynamoDB, CloudFront)
+3. Configures Lambda environment variables automatically via `link: [dataTable]`
+4. Outputs URLs for API and frontend
+
+**Note:** First deploy requires creating an API key:
+```bash
+make create-api-key name=frontend
+# Copy the generated key to .env.local as NEXT_PUBLIC_API_KEY
+```
 
 ### Deploy to PROD
 
 ```bash
-# With Makefile (requires confirmation + auto-fixes env vars)
+# With Makefile (requires confirmation)
 make deploy-prod
 
-# Or manually (requires fix-env afterward)
+# Or manually
 npx sst deploy --stage prod
-make fix-env  # Required: SST bug workaround for Lambda env vars
 ```
 
 ### Remove Stack

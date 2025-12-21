@@ -1,32 +1,52 @@
 import useSWR from 'swr'
 
 /**
- * Fetcher function for SWR
+ * Fetcher function for SWR with retry logic and timeout
  * @param {string} url - API endpoint URL
  * @returns {Promise<Object>} JSON response
  */
 const fetcher = async (url) => {
-  const headers = {}
-
-  // Add API key if configured
+  const maxRetries = 3
   const apiKey = process.env.NEXT_PUBLIC_API_KEY
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey
-  }
 
-  const response = await fetch(url, { headers })
-  if (!response.ok) {
-    throw new Error('Failed to fetch stats')
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const headers = {}
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey
+      }
+
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(10000), // 10s timeout
+        headers,
+      })
+
+      if (!response.ok) {
+        // Rate limited - wait and retry
+        if (response.status === 429) {
+          await new Promise(r => setTimeout(r, 2000 * (i + 1)))
+          continue
+        }
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      return response.json()
+    } catch (err) {
+      // Last attempt - throw error
+      if (i === maxRetries - 1) throw err
+
+      // Exponential backoff: 1s, 2s, 4s
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)))
+    }
   }
-  return response.json()
 }
 
 /**
  * Hook to fetch stats from the API with auto-refresh
- * @param {number} [refreshInterval=15000] - Refresh interval in milliseconds (default: 15s)
+ * @param {number} [refreshInterval=60000] - Refresh interval in milliseconds (default: 60s)
  * @returns {Object} SWR response with data, error, and isLoading
  */
-export function useStats(refreshInterval = 15000) {
+export function useStats(refreshInterval = 60000) {
   // Use local API route for development, or external API URL for production
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
 
@@ -34,8 +54,8 @@ export function useStats(refreshInterval = 15000) {
     `${apiUrl}/stats`,
     fetcher,
     {
-      refreshInterval, // Auto-refresh every 15 seconds
-      revalidateOnFocus: true,
+      refreshInterval, // Auto-refresh every 60 seconds (reduced from 15s)
+      revalidateOnFocus: false, // Don't refetch when tab is focused (reduces unnecessary requests)
       revalidateOnReconnect: true,
       dedupingInterval: 10000, // Prevent duplicate requests within 10s
     }

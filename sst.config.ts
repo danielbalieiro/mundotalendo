@@ -21,12 +21,21 @@ export default $config({
         SK: "string",  // Sort key: TIMESTAMP#*, KEY#*
       },
       primaryIndex: { hashKey: "PK", rangeKey: "SK" },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+        },
+      },
     });
 
     // API Gateway with inline route definitions
     const api = new sst.aws.ApiGatewayV2("Api", {
       cors: {
-        allowOrigins: ["*"],
+        allowOrigins: [
+          "https://mundotalendo.com.br",
+          "https://dev.mundotalendo.com.br",
+          "http://localhost:3000", // Local development
+        ],
         allowMethods: ["GET", "POST", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization", "X-API-Key"],
       },
@@ -51,6 +60,11 @@ export default $config({
       link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 10;
+        },
+      },
     });
 
     api.route("POST /test/seed", {
@@ -60,6 +74,11 @@ export default $config({
       link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 5;
+        },
+      },
     });
 
     api.route("GET /stats", {
@@ -69,6 +88,11 @@ export default $config({
       link: [dataTable],
       timeout: "30 seconds",
       memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 50; // Most called endpoint
+        },
+      },
     });
 
     api.route("POST /clear", {
@@ -78,6 +102,11 @@ export default $config({
       link: [dataTable],
       timeout: "60 seconds",
       memory: "512 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 5;
+        },
+      },
     });
 
     // Next.js Frontend

@@ -107,7 +107,15 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		"totalDeleted":   eventsDeleted + errorsDeleted,
 	}
 
-	responseBody, _ := json.Marshal(response)
+	responseBody, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("ERROR marshaling response: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 500,
+			Headers:    map[string]string{"Content-Type": "application/json"},
+			Body:       `{"error":"INTERNAL_ERROR","message":"Failed to build response"}`,
+		}, nil
+	}
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},

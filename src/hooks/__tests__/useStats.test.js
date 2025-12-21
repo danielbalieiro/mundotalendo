@@ -5,6 +5,14 @@ import { useStats } from '../useStats';
 // Mock fetch globally
 global.fetch = jest.fn();
 
+// Mock AbortSignal.timeout for testing (not available in JSDOM)
+if (!AbortSignal.timeout) {
+  AbortSignal.timeout = jest.fn((ms) => {
+    const controller = new AbortController();
+    return controller.signal;
+  });
+}
+
 // Mock environment variables
 const originalEnv = process.env;
 
@@ -33,7 +41,7 @@ describe('useStats hook', () => {
         total: 3,
       };
 
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => mockData,
       });
@@ -58,7 +66,7 @@ describe('useStats hook', () => {
     it('should use local API route when NEXT_PUBLIC_API_URL is not set', async () => {
       delete process.env.NEXT_PUBLIC_API_URL;
 
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
       });
@@ -76,7 +84,7 @@ describe('useStats hook', () => {
     it('should use NEXT_PUBLIC_API_URL when set', async () => {
       process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com';
 
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
       });
@@ -94,7 +102,7 @@ describe('useStats hook', () => {
     it('should include API key in headers when NEXT_PUBLIC_API_KEY is set', async () => {
       process.env.NEXT_PUBLIC_API_KEY = 'test-api-key-123';
 
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
       });
@@ -116,7 +124,7 @@ describe('useStats hook', () => {
     it('should not include API key header when NEXT_PUBLIC_API_KEY is not set', async () => {
       delete process.env.NEXT_PUBLIC_API_KEY;
 
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
       });
@@ -132,41 +140,41 @@ describe('useStats hook', () => {
 
   describe('error handling', () => {
     it('should handle HTTP error responses', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
-      const { result } = renderHook(() => useStats(0));
+      const { result } = renderHook(() => useStats(0), { wrapper });
 
       await waitFor(() => {
         expect(result.current.error).toBeDefined();
-      });
+      }, { timeout: 10000 }); // Longer timeout for retry logic (3 attempts + exponential backoff)
 
       expect(result.current.countries).toEqual([]);
       expect(result.current.total).toBe(0);
     });
 
     it('should handle network errors', async () => {
-      fetch.mockRejectedValueOnce(new Error('Network error'));
+      fetch.mockRejectedValue(new Error('Network error'));
 
-      const { result } = renderHook(() => useStats(0));
+      const { result } = renderHook(() => useStats(0), { wrapper });
 
       await waitFor(() => {
         expect(result.current.error).toBeDefined();
-      });
+      }, { timeout: 10000 }); // Longer timeout for retry logic (3 attempts + exponential backoff)
 
       expect(result.current.countries).toEqual([]);
       expect(result.current.total).toBe(0);
     });
 
     it('should return empty arrays when data is missing', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({}),
       });
 
-      const { result } = renderHook(() => useStats(0));
+      const { result } = renderHook(() => useStats(0), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -177,7 +185,7 @@ describe('useStats hook', () => {
     });
 
     it.skip('should handle malformed JSON - TODO: Fix SWR with React 19', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => {
           throw new Error('Invalid JSON');
@@ -194,7 +202,7 @@ describe('useStats hook', () => {
 
   describe('data structure', () => {
     it('should handle empty countries array', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
       });
@@ -245,7 +253,7 @@ describe('useStats hook', () => {
   });
 
   describe('refresh interval', () => {
-    it('should use default refresh interval of 15000ms', async () => {
+    it('should use default refresh interval of 60000ms', async () => {
       fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: [], total: 0 }),
@@ -290,7 +298,7 @@ describe('useStats hook', () => {
 
   describe('return value structure', () => {
     it('should always return an object with expected properties', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: ['BRA'], total: 1 }),
       });
@@ -308,7 +316,7 @@ describe('useStats hook', () => {
     });
 
     it('should return correct types', async () => {
-      fetch.mockResolvedValueOnce({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ countries: ['BRA'], total: 1 }),
       });

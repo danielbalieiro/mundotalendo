@@ -7,6 +7,7 @@ import { getMonthByCountry, months } from '@/config/months'
 import { getCountryName, countryNames } from '@/config/countries'
 import { countryCentroids } from '@/config/countryCentroids'
 import { getCountryProgressColor, getTierLabel } from '@/utils/colorTiers'
+import { logger } from '@/utils/logger'
 
 /**
  * Build GeoJSON FeatureCollection with country centroids and Portuguese names
@@ -189,7 +190,7 @@ export default function Map() {
             'text-halo-blur': 1,
           },
         })
-        console.log('Portuguese country labels added from GeoJSON!')
+        logger.debug('Portuguese country labels added from GeoJSON!')
       }
     })
 

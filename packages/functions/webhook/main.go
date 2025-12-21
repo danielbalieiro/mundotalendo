@@ -35,6 +35,18 @@ func init() {
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Printf("Received webhook request: %s", request.Body)
 
+	// Validate payload size (max 1 MB)
+	if len(request.Body) > 1024*1024 {
+		log.Printf("Payload too large: %d bytes", len(request.Body))
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 400,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"PAYLOAD_TOO_LARGE","message":"Payload exceeds 1 MB limit"}`,
+		}, nil
+	}
+
 	// Validate API key
 	apiKey := request.Headers["x-api-key"]
 	if apiKey == "" {
@@ -76,6 +88,29 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 				"Content-Type": "application/json",
 			},
 			Body: `{"success": true, "message": "Event ignored"}`,
+		}, nil
+	}
+
+	// Validate required fields
+	if payload.Perfil.Nome == "" {
+		log.Printf("Validation error: missing perfil.nome")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 400,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"VALIDATION_ERROR","message":"Missing required field: perfil.nome"}`,
+		}, nil
+	}
+
+	if len(payload.Desafios) == 0 {
+		log.Printf("Validation error: no desafios provided")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 400,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"VALIDATION_ERROR","message":"No desafios provided"}`,
 		}, nil
 	}
 
@@ -125,6 +160,16 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		// If concluido == true, force progress to 100%
 		if desafio.Concluido {
 			maxProgress = 100
+		}
+
+		// Validate progress is in range 0-100
+		if maxProgress < 0 || maxProgress > 100 {
+			log.Printf("WARN: Invalid progress %d for %s, clamping to 0-100", maxProgress, desafio.Descricao)
+			if maxProgress < 0 {
+				maxProgress = 0
+			} else if maxProgress > 100 {
+				maxProgress = 100
+			}
 		}
 
 		// Convert country name to ISO code
@@ -228,11 +273,31 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		response["errors"] = errors
 	}
 
-	responseBody, _ := json.Marshal(response)
+	responseBody, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("ERROR marshaling response: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 500,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"INTERNAL_ERROR","message":"Failed to build response"}`,
+		}, nil
+	}
 
-	// Return 200 for successful webhook receipt, even if processing had issues
+	// Return appropriate status code based on processing results
+	statusCode := 200
+	if processedCount == 0 && errorCount > 0 {
+		// All processing failed - return 500
+		statusCode = 500
+		log.Printf("All processing failed: %d errors, 0 processed", errorCount)
+	} else if processedCount > 0 {
+		// At least some items processed successfully - return 200
+		statusCode = 200
+	}
+
 	return events.APIGatewayV2HTTPResponse{
-		StatusCode: 200,
+		StatusCode: statusCode,
 		Headers: map[string]string{
 			"Content-Type": "application/json",
 		},
@@ -241,9 +306,20 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 }
 
 func errorResponse(statusCode int, message string) events.APIGatewayV2HTTPResponse {
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"error": message,
 	})
+	if err != nil {
+		log.Printf("ERROR marshaling error response: %v", err)
+		// Fallback to hardcoded JSON if marshal fails
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 500,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Body: `{"error":"INTERNAL_ERROR"}`,
+		}
+	}
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: statusCode,
 		Headers: map[string]string{

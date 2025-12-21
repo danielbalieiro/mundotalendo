@@ -22,6 +22,7 @@ import (
 var (
 	dynamoClient *dynamodb.Client
 	tableName    string
+	rng          *rand.Rand
 )
 
 func init() {
@@ -31,7 +32,7 @@ func init() {
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
 	tableName = os.Getenv("SST_Resource_DataTable_name")
-	rand.Seed(time.Now().UnixNano())
+	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 // Get all country names from the mapping
@@ -83,24 +84,24 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 
 	for i := 0; i < count; i++ {
 		// Random country
-		randomCountry := allCountries[rand.Intn(len(allCountries))]
+		randomCountry := allCountries[rng.Intn(len(allCountries))]
 		iso3 := mapping.GetISO(randomCountry)
 		if iso3 == "" {
 			continue
 		}
 
 		// Random category (month)
-		randomCategory := categories[rand.Intn(len(categories))]
+		randomCategory := categories[rng.Intn(len(categories))]
 
 		// Random timestamp within the last 30 days
-		daysAgo := rand.Intn(30)
+		daysAgo := rng.Intn(30)
 		timestamp := time.Now().AddDate(0, 0, -daysAgo)
 
 		// Random progress 0-100
-		randomProgress := rand.Intn(101)
+		randomProgress := rng.Intn(101)
 
 		// Generate random user
-		userName := fmt.Sprintf("TestUser%d", rand.Intn(100))
+		userName := fmt.Sprintf("TestUser%d", rng.Intn(100))
 
 		// Create sample metadata
 		samplePayload := types.WebhookPayload{

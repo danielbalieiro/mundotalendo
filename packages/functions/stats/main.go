@@ -51,22 +51,38 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		}, nil
 	}
 
-	// Query DynamoDB for all readings
-	result, err := dynamoClient.Query(ctx, &dynamodb.QueryInput{
-		TableName:              &tableName,
-		KeyConditionExpression: aws.String("PK = :pk"),
-		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
-			":pk": &ddbTypes.AttributeValueMemberS{Value: "EVENT#LEITURA"},
-		},
-	})
-	if err != nil {
-		log.Printf("Error querying DynamoDB: %v", err)
-		return errorResponse(500, "Error fetching data"), nil
+	// Query DynamoDB for all readings with pagination
+	var allItems []map[string]ddbTypes.AttributeValue
+	var lastKey map[string]ddbTypes.AttributeValue
+
+	for {
+		result, err := dynamoClient.Query(ctx, &dynamodb.QueryInput{
+			TableName:              &tableName,
+			KeyConditionExpression: aws.String("PK = :pk"),
+			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+				":pk": &ddbTypes.AttributeValueMemberS{Value: "EVENT#LEITURA"},
+			},
+			ExclusiveStartKey: lastKey,
+		})
+		if err != nil {
+			log.Printf("Error querying DynamoDB: %v", err)
+			return errorResponse(500, "Error fetching data"), nil
+		}
+
+		allItems = append(allItems, result.Items...)
+
+		// Check if there are more pages
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		lastKey = result.LastEvaluatedKey
 	}
+
+	log.Printf("Fetched %d total items from DynamoDB", len(allItems))
 
 	// Aggregate max progress per country
 	countryProgress := make(map[string]int) // ISO -> max progress
-	for _, item := range result.Items {
+	for _, item := range allItems {
 		var reading types.LeituraItem
 		err := attributevalue.UnmarshalMap(item, &reading)
 		if err != nil {
@@ -115,9 +131,21 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 }
 
 func errorResponse(statusCode int, message string) events.APIGatewayV2HTTPResponse {
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"error": message,
 	})
+	if err != nil {
+		log.Printf("ERROR marshaling error response: %v", err)
+		// Fallback to hardcoded JSON if marshal fails
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 500,
+			Headers: map[string]string{
+				"Content-Type":                "application/json",
+				"Access-Control-Allow-Origin": "*",
+			},
+			Body: `{"error":"INTERNAL_ERROR"}`,
+		}
+	}
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: statusCode,
 		Headers: map[string]string{

@@ -1,4 +1,5 @@
 import './globals.css'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 /** @type {import("next").Metadata} */
 export const metadata = {
@@ -14,7 +15,11 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </body>
     </html>
   )
 }
