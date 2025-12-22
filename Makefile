@@ -304,6 +304,57 @@ delete-api-key: ## Delete API key (make delete-api-key name=myapp)
 		echo "$(GREEN)Deleted: $(name)$(NC)"; \
 	done
 
+# PROD API Key Management
+create-api-key-prod: ## Create new API key in PROD (make create-api-key-prod name=myapp)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Use 'make create-api-key-prod name=yourname'$(NC)"; \
+		exit 1; \
+	fi
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-prod-DataTable`)]' --output text); \
+	UUID=$$(uuidgen | tr '[:upper:]' '[:lower:]'); \
+	DATE=$$(date +%Y-%m-%d); \
+	API_KEY="$(name)-$$UUID-$$DATE"; \
+	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "$(RED)Creating PROD API key...$(NC)"; \
+	aws dynamodb put-item --region $(REGION) --table-name $$DATA_TABLE \
+		--item '{"PK":{"S":"APIKEY#$(name)"},"SK":{"S":"KEY#'$$UUID'"},"name":{"S":"$(name)"},"key":{"S":"'$$API_KEY'"},"createdAt":{"S":"'$$TIMESTAMP'"},"active":{"BOOL":true}}' \
+		--output text > /dev/null 2>&1; \
+	echo "$(GREEN)PROD API Key created:$(NC)"; \
+	echo "$(YELLOW)$$API_KEY$(NC)"
+
+list-api-keys-prod: ## List all PROD API keys
+	@echo "$(RED)PROD Active API Keys:$(NC)"
+	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-prod-DataTable`)]' --output text); \
+	aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
+		--filter-expression "begins_with(PK, :pk)" \
+		--expression-attribute-values '{":pk":{"S":"APIKEY#"}}' \
+		--query 'Items[].{Name:name.S,Key:key.S,Created:createdAt.S,Active:active.BOOL}' \
+		--output table
+
+delete-api-key-prod: ## Delete PROD API key (make delete-api-key-prod name=myapp)
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: Use 'make delete-api-key-prod name=yourname'$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(RED)Deleting PROD API key for: $(name)$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-prod-DataTable`)]' --output text); \
+		ITEMS=$$(aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
+			--filter-expression "PK = :pk" \
+			--expression-attribute-values '{":pk":{"S":"APIKEY#$(name)"}}' \
+			--query 'Items[].SK.S' --output text); \
+		for SK in $$ITEMS; do \
+			aws dynamodb delete-item --region $(REGION) --table-name $$DATA_TABLE \
+				--key '{"PK":{"S":"APIKEY#$(name)"},"SK":{"S":"'$$SK'"}}' \
+				--output text > /dev/null 2>&1; \
+			echo "$(GREEN)Deleted: $(name)$(NC)"; \
+		done; \
+	else \
+		echo "Deletion cancelled."; \
+	fi
+
 # Git
 commit: ## Quick commit (make commit m="message")
 	@if [ -z "$(m)" ]; then \

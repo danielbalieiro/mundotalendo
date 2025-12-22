@@ -13,6 +13,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
+    "FrontendApiKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Web": {
       "type": "sst.aws.Nextjs"
       "url": string

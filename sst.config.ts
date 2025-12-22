@@ -113,7 +113,10 @@ export default $config({
     const web = new sst.aws.Nextjs("Web", {
       path: "./",
       environment: {
-        NEXT_PUBLIC_API_URL: api.url,
+        NEXT_PUBLIC_API_URL: api.domain?.name
+          ? `https://${api.domain.name}`
+          : api.url,
+        NEXT_PUBLIC_API_KEY: new sst.Secret("FrontendApiKey").value,
       },
       domain:
         $app.stage === "prod"
