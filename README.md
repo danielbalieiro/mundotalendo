@@ -1,6 +1,6 @@
 # Mundo Tá Lendo 2026 🌍📚
 
-Global telemetry dashboard for the "Mundo Tá Lendo 2026" reading challenge. Collaboratively discover cultures around the world through an interactive map that shows the collective reading journey with a visual progress system.
+Global map of the 2026 Mundo Tá Lendo marathon. Collaboratively discover cultures around the world through an interactive map that shows the collective reading journey with a visual progress system.
 
 ## 🌟 Concept
 
