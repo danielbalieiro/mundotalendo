@@ -3,11 +3,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import { useStats } from '@/hooks/useStats'
+import { useUserLocations } from '@/hooks/useUserLocations'
 import { getMonthByCountry, months } from '@/config/months'
 import { getCountryName, countryNames } from '@/config/countries'
 import { countryCentroids } from '@/config/countryCentroids'
 import { getCountryProgressColor, getTierLabel } from '@/utils/colorTiers'
 import { logger } from '@/utils/logger'
+
+// Feature flag for user markers
+const SHOW_USER_MARKERS = process.env.NEXT_PUBLIC_SHOW_USER_MARKERS === 'true'
 
 /**
  * Build GeoJSON FeatureCollection with country centroids and Portuguese names
@@ -33,6 +37,63 @@ export function buildCountryLabelsGeoJSON() {
 }
 
 /**
+ * Build GeoJSON for user markers with offset for multiple users in same country
+ * @param {Array} users - Array of user location objects
+ * @param {Object} centroids - Country centroids mapping (ISO -> [lng, lat])
+ * @returns {Object} GeoJSON FeatureCollection
+ */
+export function buildUserMarkersGeoJSON(users, centroids) {
+  // Group users by country
+  const usersByCountry = {}
+  users.forEach(user => {
+    if (!user.avatarURL || !centroids[user.iso3]) return // Filter out users without avatar or invalid country
+    if (!usersByCountry[user.iso3]) {
+      usersByCountry[user.iso3] = []
+    }
+    usersByCountry[user.iso3].push(user)
+  })
+
+  // Create features with offset if necessary
+  const features = []
+  Object.entries(usersByCountry).forEach(([iso, countryUsers]) => {
+    const baseCoords = centroids[iso]
+
+    countryUsers.forEach((user, index) => {
+      // Place markers BELOW country label (south of centroid)
+      // Multiple users spread horizontally
+      const totalUsers = countryUsers.length
+      const horizontalSpacing = 2.5 // degrees between users
+      const horizontalOffset = totalUsers === 1
+        ? 0
+        : (index - (totalUsers - 1) / 2) * horizontalSpacing
+
+      const offsetLng = horizontalOffset
+      const offsetLat = -0.875 // Always below (negative = south)
+
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [baseCoords[0] + offsetLng, baseCoords[1] + offsetLat],
+        },
+        properties: {
+          user: user.user,
+          avatarURL: user.avatarURL,
+          country: user.pais,
+          book: user.livro || user.pais, // Fallback to country if no book
+          timestamp: user.timestamp,
+        },
+      })
+    })
+  })
+
+  return {
+    type: 'FeatureCollection',
+    features,
+  }
+}
+
+/**
  * Map component with MapLibre GL JS
  * @returns {JSX.Element}
  */
@@ -40,9 +101,11 @@ export default function Map() {
   const mapContainer = useRef(null)
   const map = useRef(null)
   const [hoveredCountry, setHoveredCountry] = useState(null)
+  const [hoveredUser, setHoveredUser] = useState(null)
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 })
 
   const { countries, total, isLoading, error } = useStats()
+  const { users } = useUserLocations()
 
   // Function to apply country colors to the map (memoized with useCallback)
   const applyCountryColors = useCallback(() => {
@@ -98,7 +161,7 @@ export default function Map() {
       },
       center: [-40, 10],
       zoom: 1.5,
-      minZoom: 1,
+      minZoom: 2.0, // Limit zoom out to prevent excessive distance
       maxZoom: 6, // Limit maximum zoom to avoid state divisions
     })
 
@@ -192,6 +255,42 @@ export default function Map() {
         })
         logger.debug('Portuguese country labels added from GeoJSON!')
       }
+
+      // Add user markers (only if feature flag is enabled)
+      if (SHOW_USER_MARKERS && !map.current.getSource('user-markers')) {
+        map.current.addSource('user-markers', {
+          type: 'geojson',
+          data: buildUserMarkersGeoJSON(users, countryCentroids),
+        })
+
+        // Add layer with white circle background
+        map.current.addLayer({
+          id: 'user-marker-bg',
+          type: 'circle',
+          source: 'user-markers',
+          paint: {
+            'circle-radius': 12,
+            'circle-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#2563eb', // GPS blue
+          },
+        })
+
+        // Add layer with user avatar images
+        map.current.addLayer({
+          id: 'user-marker-images',
+          type: 'symbol',
+          source: 'user-markers',
+          layout: {
+            'icon-image': ['get', 'user'], // Use username as sprite ID
+            'icon-size': 0.5, // 48px sprite * 0.5 = 24px (matches circle diameter)
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+          },
+        })
+
+        logger.debug('User markers layers added!')
+      }
     })
 
     // Mouse move handler
@@ -222,6 +321,29 @@ export default function Map() {
       map.current.getCanvas().style.cursor = ''
     })
 
+    // User marker mouse handlers (only if feature flag is enabled)
+    if (SHOW_USER_MARKERS) {
+      map.current.on('mouseenter', 'user-marker-images', (e) => {
+        if (e.features && e.features.length > 0) {
+          const feature = e.features[0]
+          setHoveredUser({
+            user: feature.properties.user,
+            country: feature.properties.country,
+            book: feature.properties.book,
+            avatarURL: feature.properties.avatarURL,
+            timestamp: feature.properties.timestamp,
+          })
+          setCursorPosition({ x: e.point.x, y: e.point.y })
+          map.current.getCanvas().style.cursor = 'pointer'
+        }
+      })
+
+      map.current.on('mouseleave', 'user-marker-images', () => {
+        setHoveredUser(null)
+        map.current.getCanvas().style.cursor = ''
+      })
+    }
+
     return () => {
       if (map.current) {
         map.current.remove()
@@ -233,14 +355,96 @@ export default function Map() {
   // Update colors when countries change
   useEffect(() => {
     applyCountryColors()
-  }, [countries])
+  }, [countries, applyCountryColors])
+
+  // Load user avatar sprites (only if feature flag is enabled)
+  useEffect(() => {
+    if (!SHOW_USER_MARKERS || !map.current || !map.current.hasImage) return
+
+    users.forEach(user => {
+      if (!user.avatarURL) return
+
+      // Check if sprite already loaded
+      if (map.current.hasImage(user.user)) return
+
+      // Load avatar image via proxy to bypass CORS in development
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        if (map.current && !map.current.hasImage(user.user)) {
+          try {
+            // Create circular clipped version of the image
+            const size = 48 // Size of the circular sprite
+            const canvas = document.createElement('canvas')
+            canvas.width = size
+            canvas.height = size
+            const ctx = canvas.getContext('2d')
+
+            // Draw circular clip path
+            ctx.beginPath()
+            ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
+            ctx.closePath()
+            ctx.clip()
+
+            // Draw image to fill the circle (cover the entire area)
+            const imgAspect = img.width / img.height
+            let drawWidth, drawHeight, offsetX, offsetY
+
+            if (imgAspect > 1) {
+              // Image is wider - fit height and crop sides
+              drawHeight = size
+              drawWidth = size * imgAspect
+              offsetX = -(drawWidth - size) / 2
+              offsetY = 0
+            } else {
+              // Image is taller - fit width and crop top/bottom
+              drawWidth = size
+              drawHeight = size / imgAspect
+              offsetX = 0
+              offsetY = -(drawHeight - size) / 2
+            }
+
+            ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
+
+            // Convert canvas to ImageData for MapLibre
+            const imageData = ctx.getImageData(0, 0, size, size)
+
+            // Add the ImageData as sprite (pixelRatio: 1 so 48px sprite = 48px on map)
+            map.current.addImage(user.user, imageData, { pixelRatio: 1 })
+            logger.debug(`Loaded circular avatar sprite for ${user.user}`)
+          } catch (error) {
+            logger.warn(`Failed to add sprite for ${user.user}:`, error)
+          }
+        }
+      }
+      img.onerror = () => {
+        logger.warn(`Failed to load avatar for ${user.user}: ${user.avatarURL}`)
+      }
+      // Use proxy in development to bypass CORS, direct URL in production
+      const imageUrl = process.env.NODE_ENV === 'development'
+        ? `/api/proxy-image?url=${encodeURIComponent(user.avatarURL)}`
+        : user.avatarURL
+      img.src = imageUrl
+    })
+  }, [users])
+
+  // Update user markers GeoJSON when users change
+  useEffect(() => {
+    if (!SHOW_USER_MARKERS) return
+    if (map.current && map.current.getSource('user-markers')) {
+      map.current.getSource('user-markers').setData(
+        buildUserMarkersGeoJSON(users, countryCentroids)
+      )
+      logger.debug(`Updated user markers: ${users.length} users`)
+    }
+  }, [users])
 
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* Hover Tooltip */}
-      {hoveredCountry && (
+      {/* Hover Tooltip - Country */}
+      {hoveredCountry && !hoveredUser && (
         <div
           className="absolute z-20 bg-black/90 text-white px-4 py-2 rounded-lg shadow-lg pointer-events-none"
           style={{
@@ -257,6 +461,22 @@ export default function Map() {
             <span className="text-xs ml-2 opacity-75">
               • {getTierLabel(hoveredCountry.progress)}
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Hover Tooltip - User Marker */}
+      {SHOW_USER_MARKERS && hoveredUser && (
+        <div
+          className="absolute z-30 bg-blue-600/95 text-white px-4 py-2 rounded-lg shadow-lg pointer-events-none"
+          style={{
+            left: cursorPosition.x + 15,
+            top: cursorPosition.y + 15,
+          }}
+        >
+          <div className="font-semibold text-sm">📍 {hoveredUser.user}</div>
+          <div className="text-xs opacity-90 mt-1">
+            Lendo: {hoveredUser.book}
           </div>
         </div>
       )}

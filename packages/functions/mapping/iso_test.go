@@ -95,6 +95,24 @@ func TestGetISO(t *testing.T) {
 			expectedISO:  "GBR",
 			description:  "Should return GBR for Reino Unido",
 		},
+		{
+			name:         "Inglaterra",
+			countryName:  "Inglaterra",
+			expectedISO:  "GBR",
+			description:  "Should return GBR for Inglaterra (UK alias)",
+		},
+		{
+			name:         "Escócia",
+			countryName:  "Escócia",
+			expectedISO:  "GBR",
+			description:  "Should return GBR for Escócia (UK alias)",
+		},
+		{
+			name:         "País de Gales",
+			countryName:  "País de Gales",
+			expectedISO:  "GBR",
+			description:  "Should return GBR for País de Gales (UK alias)",
+		},
 	}
 
 	for _, tt := range tests {
@@ -240,6 +258,7 @@ func TestNameToIso_NoISOCollisions(t *testing.T) {
 
 	knownDuplicates := map[string]bool{
 		"USA": true, // Alasca and Estados Unidos
+		"GBR": true, // Reino Unido, Inglaterra, Escócia, País de Gales, Irlanda do Norte
 		"SWZ": true, // Essuatíni and Suazilândia (same country, different names)
 	}
 

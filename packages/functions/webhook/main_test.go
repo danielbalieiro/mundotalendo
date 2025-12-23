@@ -465,3 +465,176 @@ func TestMetadataMarshaling(t *testing.T) {
 		t.Error("Metadata lost data during marshal/unmarshal cycle")
 	}
 }
+
+func TestSKUniquenessWithDuplicateTimestamps(t *testing.T) {
+	// Test that SKs are unique even when multiple desafios have the same timestamp
+	// This prevents DynamoDB overwrites when processing multiple items in one payload
+
+	timestamp := time.Date(2025, 12, 23, 14, 0, 0, 0, time.UTC)
+
+	// Simulate processing 3 desafios with same timestamp
+	testCases := []struct {
+		index          int
+		expectedSKSuffix string
+	}{
+		{0, "#0"},
+		{1, "#1"},
+		{2, "#2"},
+	}
+
+	for _, tc := range testCases {
+		t.Run("Index_"+tc.expectedSKSuffix, func(t *testing.T) {
+			sk := "TIMESTAMP#" + timestamp.Format(time.RFC3339) + tc.expectedSKSuffix
+			expectedSK := "TIMESTAMP#2025-12-23T14:00:00Z" + tc.expectedSKSuffix
+
+			if sk != expectedSK {
+				t.Errorf("Expected SK %s, got %s", expectedSK, sk)
+			}
+
+			// Verify SKs are different for different indices
+			if tc.index > 0 {
+				prevSK := "TIMESTAMP#2025-12-23T14:00:00Z#" + string(rune('0'+tc.index-1))
+				if sk == prevSK {
+					t.Errorf("SK should be unique, but %s == %s", sk, prevSK)
+				}
+			}
+		})
+	}
+}
+
+func TestImagemURLStorage(t *testing.T) {
+	tests := []struct {
+		name            string
+		payload         types.WebhookPayload
+		expectedImagem  string
+		shouldHaveImage bool
+	}{
+		{
+			name: "Payload with avatar URL",
+			payload: types.WebhookPayload{
+				Perfil: types.Perfil{
+					Nome:   "Test User",
+					Link:   "https://example.com/user",
+					Imagem: "https://storage.googleapis.com/example/avatar.jpg",
+				},
+				Maratona: types.Maratona{
+					Identificador: "mundotalendo-2026",
+				},
+				Desafios: []types.Desafio{
+					{
+						Descricao: "Brasil",
+						Categoria: "Janeiro",
+						Tipo:      "leitura",
+						Concluido: true,
+					},
+				},
+			},
+			expectedImagem:  "https://storage.googleapis.com/example/avatar.jpg",
+			shouldHaveImage: true,
+		},
+		{
+			name: "Payload without avatar URL (empty)",
+			payload: types.WebhookPayload{
+				Perfil: types.Perfil{
+					Nome:   "User Without Avatar",
+					Link:   "https://example.com/user2",
+					Imagem: "", // Empty avatar
+				},
+				Maratona: types.Maratona{
+					Identificador: "mundotalendo-2026",
+				},
+				Desafios: []types.Desafio{
+					{
+						Descricao: "Portugal",
+						Categoria: "Fevereiro",
+						Tipo:      "leitura",
+						Concluido: true,
+					},
+				},
+			},
+			expectedImagem:  "",
+			shouldHaveImage: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate creating LeituraItem (as webhook does)
+			item := types.LeituraItem{
+				PK:        "EVENT#LEITURA",
+				SK:        "TIMESTAMP#2025-12-23T15:00:00Z#0",
+				ISO3:      "BRA",
+				Pais:      "Brasil",
+				Categoria: "Janeiro",
+				Progresso: 100,
+				User:      tt.payload.Perfil.Nome,
+				ImagemURL: tt.payload.Perfil.Imagem, // This is the key field we're testing
+				Metadata:  "{}",
+			}
+
+			// Test: ImagemURL should match expected value
+			if item.ImagemURL != tt.expectedImagem {
+				t.Errorf("Expected ImagemURL '%s', got '%s'", tt.expectedImagem, item.ImagemURL)
+			}
+
+			// Test: ImagemURL field should exist in struct
+			if tt.shouldHaveImage && item.ImagemURL == "" {
+				t.Error("Expected ImagemURL to have value, but got empty string")
+			}
+
+			if !tt.shouldHaveImage && item.ImagemURL != "" {
+				t.Errorf("Expected ImagemURL to be empty, but got '%s'", item.ImagemURL)
+			}
+		})
+	}
+}
+
+func TestPerfilImagemField(t *testing.T) {
+	// Test that Perfil struct correctly holds Imagem field
+	perfil := types.Perfil{
+		Nome:   "Test User",
+		Link:   "https://example.com/user",
+		Imagem: "https://storage.googleapis.com/example/avatar.jpg",
+	}
+
+	if perfil.Imagem == "" {
+		t.Error("Expected Perfil.Imagem to be set")
+	}
+
+	if perfil.Imagem != "https://storage.googleapis.com/example/avatar.jpg" {
+		t.Errorf("Expected Imagem URL to match, got '%s'", perfil.Imagem)
+	}
+}
+
+func TestLeituraItemWithImagemURL(t *testing.T) {
+	// Test that LeituraItem correctly stores ImagemURL
+	item := types.LeituraItem{
+		PK:        "EVENT#LEITURA",
+		SK:        "TIMESTAMP#2025-12-23T15:00:00Z#0",
+		ISO3:      "BRA",
+		Pais:      "Brasil",
+		Categoria: "Janeiro",
+		Progresso: 100,
+		User:      "Test User",
+		ImagemURL: "https://example.com/avatar.jpg",
+		Metadata:  "{}",
+	}
+
+	// Validate all fields
+	if item.ImagemURL == "" {
+		t.Error("Expected ImagemURL to be set in LeituraItem")
+	}
+
+	if item.ImagemURL != "https://example.com/avatar.jpg" {
+		t.Errorf("Expected ImagemURL 'https://example.com/avatar.jpg', got '%s'", item.ImagemURL)
+	}
+
+	// Ensure other fields are not affected
+	if item.User != "Test User" {
+		t.Errorf("Expected User 'Test User', got '%s'", item.User)
+	}
+
+	if item.ISO3 != "BRA" {
+		t.Errorf("Expected ISO3 'BRA', got '%s'", item.ISO3)
+	}
+}

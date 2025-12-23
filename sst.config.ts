@@ -109,6 +109,20 @@ export default $config({
       },
     });
 
+    api.route("GET /users/locations", {
+      handler: "packages/functions/users",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable],
+      timeout: "30 seconds",
+      memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 50; // Most called endpoint (same as stats)
+        },
+      },
+    });
+
     // Next.js Frontend
     const web = new sst.aws.Nextjs("Web", {
       path: "./",
@@ -117,6 +131,7 @@ export default $config({
           ? `https://${api.domain.name}`
           : api.url,
         NEXT_PUBLIC_API_KEY: new sst.Secret("FrontendApiKey").value,
+        NEXT_PUBLIC_SHOW_USER_MARKERS: $app.stage === "prod" ? "false" : "true", // Feature flag: OFF in prod until validated
       },
       domain:
         $app.stage === "prod"

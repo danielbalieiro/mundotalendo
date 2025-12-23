@@ -1,0 +1,36 @@
+{
+    "perfil": {
+        "nome": "TestUser",
+        "link": "https://test.com"
+    },
+    "maratona": {
+        "nome": "Test",
+        "identificador": "mundotalendo-2026"
+    },
+    "desafios": [
+        {
+            "descricao": "📍Brasil",
+            "categoria": "Janeiro",
+            "concluido": false,
+            "tipo": "leitura",
+            "vinculados": [
+                {
+                    "progresso": 25,
+                    "updatedAt": "2025-12-23T14:00:00.000Z"
+                }
+            ]
+        },
+        {
+            "descricao": "📍Portugal",
+            "categoria": "Fevereiro",
+            "concluido": false,
+            "tipo": "leitura",
+            "vinculados": [
+                {
+                    "progresso": 50,
+                    "updatedAt": "2025-12-23T14:00:00.000Z"
+                }
+            ]
+        }
+    ]
+}

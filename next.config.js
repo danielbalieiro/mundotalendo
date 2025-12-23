@@ -6,6 +6,12 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  // Allow dev server access from local network
+  allowedDevOrigins: [
+    '192.168.1.35', // Your local network IP
+    'localhost',
+    '127.0.0.1',
+  ],
   // Security headers
   async headers() {
     return [

@@ -16,6 +16,7 @@ import (
 	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/mapping"
 	"github.com/mundotalendo/functions/types"
+	"github.com/mundotalendo/functions/utils"
 )
 
 var (
@@ -80,7 +81,15 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	}
 
 	// Validate identificador - ignore events from other challenges
-	if payload.Maratona.Identificador != "maratona-lendo-paises" {
+	validIdentifiers := []string{"maratona-lendo-paises", "mundotalendo-2026"}
+	isValid := false
+	for _, id := range validIdentifiers {
+		if payload.Maratona.Identificador == id {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
 		log.Printf("Ignoring event with identificador: %s", payload.Maratona.Identificador)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 200,
@@ -125,18 +134,23 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	var errors []ErrorDetail
 
 	// Process each desafio
-	for _, desafio := range payload.Desafios {
+	for i, desafio := range payload.Desafios {
 		// Filter: only process "leitura" or "atividade" types
 		if desafio.Tipo != "leitura" && desafio.Tipo != "atividade" {
 			continue
 		}
 
-		// Calculate max progress from vinculados
+		// Calculate max progress from vinculados and extract book title
 		maxProgress := 0
 		var latestUpdate time.Time
+		bookTitle := ""
 		for _, vinculado := range desafio.Vinculados {
 			if vinculado.Progresso > maxProgress {
 				maxProgress = vinculado.Progresso
+			}
+			// Extract book title from most recent vinculado
+			if vinculado.Edicao != nil && vinculado.Edicao.Titulo != "" {
+				bookTitle = vinculado.Edicao.Titulo
 			}
 			// Parse UpdatedAt string to time.Time
 			if vinculado.UpdatedAt != "" {
@@ -172,15 +186,19 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			}
 		}
 
+		// Clean emojis from country name and category before processing
+		cleanedCountryName := utils.CleanEmojis(desafio.Descricao)
+		cleanedCategoria := utils.CleanEmojis(desafio.Categoria)
+
 		// Convert country name to ISO code
-		iso3 := mapping.GetISO(desafio.Descricao)
+		iso3 := mapping.GetISO(cleanedCountryName)
 		if iso3 == "" {
-			log.Printf("Country not found: %s", desafio.Descricao)
+			log.Printf("Country not found: %s (original: %s)", cleanedCountryName, desafio.Descricao)
 			saveToFalhas(ctx, "COUNTRY_NOT_FOUND", "Country not mapped in ISO table", request.Body)
 			errors = append(errors, ErrorDetail{
 				Code:    "COUNTRY_NOT_FOUND",
 				Message: "Country not mapped in ISO table",
-				Details: desafio.Descricao,
+				Details: fmt.Sprintf("%s (cleaned from: %s)", cleanedCountryName, desafio.Descricao),
 			})
 			errorCount++
 			continue
@@ -208,12 +226,14 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 
 		item := types.LeituraItem{
 			PK:        "EVENT#LEITURA",
-			SK:        fmt.Sprintf("TIMESTAMP#%s", timestamp.Format(time.RFC3339)),
+			SK:        fmt.Sprintf("TIMESTAMP#%s#%d", timestamp.Format(time.RFC3339), i),
 			ISO3:      iso3,
-			Pais:      desafio.Descricao,
-			Categoria: desafio.Categoria,
+			Pais:      cleanedCountryName,
+			Categoria: cleanedCategoria,
 			Progresso: maxProgress,
 			User:      payload.Perfil.Nome,
+			ImagemURL: payload.Perfil.Imagem, // Salvar avatar do usuário
+			Livro:     bookTitle,              // Título do livro sendo lido
 			Metadata:  string(metadataBytes),
 		}
 
@@ -245,16 +265,16 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			continue
 		}
 
-		log.Printf("Processed: %s (%s) - User: %s - Category: %s", desafio.Descricao, iso3, payload.Perfil.Nome, desafio.Categoria)
+		log.Printf("Processed: %s (%s) - User: %s - Category: %s", cleanedCountryName, iso3, payload.Perfil.Nome, cleanedCategoria)
 		processedCount++
 	}
 
 	// Build response
 	response := map[string]interface{}{
-		"success":        processedCount > 0,
-		"processed":      processedCount,
-		"failed":         errorCount,
-		"total":          processedCount + errorCount,
+		"success":   processedCount > 0,
+		"processed": processedCount,
+		"failed":    errorCount,
+		"total":     processedCount + errorCount,
 	}
 
 	// Add status message

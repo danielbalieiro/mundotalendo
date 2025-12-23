@@ -1,0 +1,59 @@
+{
+    "perfil": {
+        "nome": "DanZaekald",
+        "link": "https://maratona.app/u/DanZaekald",
+        "imagem": "https://assets.maratona.app/uploads/users/21cce56bf08058ce473c58096676adf9a67e940a14958389b50309d93d090b15/ff9f8b72-aca1-4ae7-ba66-66fc75842d06.png"
+    },
+    "maratona": {
+        "nome": "🌏MundoTáLendo 2026🌏",
+        "identificador": "mundotalendo-2026"
+    },
+    "desafios": [
+        {
+            "id": "cmj7bqn4600dp04jjenmqewvc",
+            "descricao": "📍Marrocos",
+            "categoria": "🌈Novembro",
+            "concluido": false,
+            "tipo": "leitura",
+            "vinculados": [
+                {
+                    "id": "cmjim2obx02il04lgqn6aornd",
+                    "completo": false,
+                    "progresso": 50,
+                    "avaliacao": null,
+                    "comentario": "",
+                    "updatedAt": "2025-12-23T13:23:23.726Z",
+                    "edicao": {
+                        "titulo": "The Silmarillion",
+                        "autor": "J.R.R. Tolkien",
+                        "capa": "https://cdn.maratona.app/cm858t11m001vlg03g2zlk0fn/31fbc8f6-86d8-49c7-9816-48ce381e65ed.jpeg"
+                    },
+                    "diaMarcado": null
+                }
+            ]
+        },
+        {
+            "id": "cmj7bqn4600el04jj7jdda0di",
+            "descricao": "📍Turquia",
+            "categoria": "🎄Dezembro",
+            "concluido": false,
+            "tipo": "leitura",
+            "vinculados": [
+                {
+                    "id": "cmjim33cz02k104lg400qibka",
+                    "completo": false,
+                    "progresso": 75,
+                    "avaliacao": null,
+                    "comentario": "",
+                    "updatedAt": "2025-12-23T13:25:00.000Z",
+                    "edicao": {
+                        "titulo": "The Silmarillion",
+                        "autor": "J.R.R. Tolkien",
+                        "capa": "https://cdn.maratona.app/cm858t11m001vlg03g2zlk0fn/31fbc8f6-86d8-49c7-9816-48ce381e65ed.jpeg"
+                    },
+                    "diaMarcado": null
+                }
+            ]
+        }
+    ]
+}

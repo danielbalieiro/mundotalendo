@@ -13,8 +13,9 @@ type WebhookPayload struct {
 }
 
 type Perfil struct {
-	Nome string `json:"nome"`
-	Link string `json:"link"`
+	Nome   string `json:"nome"`
+	Link   string `json:"link"`
+	Imagem string `json:"imagem"` // URL do avatar do usuário
 }
 
 type Desafio struct {
@@ -52,6 +53,8 @@ type LeituraItem struct {
 	Categoria string `dynamodbav:"categoria"`
 	Progresso int    `dynamodbav:"progresso"`
 	User      string `dynamodbav:"user"`
+	ImagemURL string `dynamodbav:"imagemURL"` // URL do avatar do usuário
+	Livro     string `dynamodbav:"livro"`     // Título do livro sendo lido
 	Metadata  string `dynamodbav:"metadata"`
 }
 
@@ -73,4 +76,19 @@ type CountryProgress struct {
 type StatsResponse struct {
 	Countries []CountryProgress `json:"countries"`
 	Total     int               `json:"total"`
+}
+
+// User locations response structure
+type UserLocation struct {
+	User      string `json:"user"`
+	AvatarURL string `json:"avatarURL"`
+	ISO3      string `json:"iso3"`
+	Pais      string `json:"pais"`
+	Livro     string `json:"livro"`
+	Timestamp string `json:"timestamp"`
+}
+
+type UserLocationsResponse struct {
+	Users []UserLocation `json:"users"`
+	Total int            `json:"total"`
 }
