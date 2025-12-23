@@ -1,7 +1,7 @@
 # Claude Context - Mundo Tá Lendo 2026
 
 > **Última atualização:** 2025-12-23
-> **Status:** ✅ PRODUÇÃO-READY - Deploy funcionando em DEV com user markers
+> **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
 
 ## 📋 Resumo Executivo
@@ -9,6 +9,55 @@
 Projeto de **descoberta cultural colaborativa** através da leitura. Dashboard que mapeia em tempo real países sendo explorados por participantes do desafio de leitura "Mundo Tá Lendo 2026".
 
 **Conceito importante:** Não é sobre "conquista" de países, é sobre **descobrir culturas** colaborativamente.
+
+## 🚨 ATENÇÃO: SISTEMA EM PRODUÇÃO
+
+**⚠️ MUDANÇAS DEVEM SER FEITAS COM EXTREMO CUIDADO**
+
+O projeto foi **promovido a produção** e está **recebendo dados reais** de participantes do desafio "Mundo Tá Lendo 2026".
+
+### Diretrizes Obrigatórias para Mudanças
+
+**ANTES de implementar QUALQUER mudança, considere:**
+
+1. **Impacto nos dados existentes**
+   - Como a mudança afetará os dados já armazenados no DynamoDB?
+   - Haverá necessidade de migração de dados?
+   - Os dados antigos continuarão funcionando com o novo código?
+
+2. **Compatibilidade retroativa**
+   - A mudança quebrará leituras já registradas?
+   - O webhook continuará processando dados corretamente?
+   - Os endpoints API manterão compatibilidade?
+
+3. **Validação e testes**
+   - Teste SEMPRE em ambiente local primeiro
+   - Valide com dados reais (não apenas seed)
+   - Verifique se não há efeitos colaterais
+
+4. **Deploy gradual**
+   - Considere feature flags para mudanças significativas
+   - Deploy em DEV antes de produção
+   - Monitore métricas após deploy
+
+5. **Rollback plan**
+   - Tenha sempre um plano de reversão
+   - Mantenha backups antes de mudanças estruturais
+   - Documente o processo de rollback
+
+**🔴 NUNCA:**
+- Apagar dados de produção sem backup confirmado
+- Mudar schema do DynamoDB sem migração planejada
+- Fazer deploy direto em produção sem testar em DEV
+- Remover campos de API que podem estar em uso
+- Alterar lógica de processamento do webhook sem validação completa
+
+**✅ SEMPRE:**
+- Testar localmente com `npm run dev:local`
+- Validar com `make stats` antes e depois de mudanças
+- Verificar logs do CloudWatch após deploys
+- Documentar mudanças no CLAUDE.md
+- Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
 
@@ -490,24 +539,39 @@ curl http://localhost:3000 | grep "Mundo Tá Lendo"
 # Deve mostrar mapa com países coloridos
 ```
 
-## 📊 Dados de Teste Atuais
+## 📊 Dados em Produção
 
-18 países no banco:
-- DJI, GNB, CAN, CAF, MAR, IRN, LUX, TKM, CRI, KOR
-- POL, ARE, COL, IDN, TZA, VNM, NRU, BHS
+**🔴 ATENÇÃO:** O banco de dados agora contém **dados reais de participantes**.
 
-Para adicionar mais: `curl -X POST .../test/seed`
+**NÃO use** os comandos de teste (`make seed`, `make clear`) em ambiente de produção!
+
+Para verificar dados atuais:
+```bash
+# Ver estatísticas reais (somente leitura)
+make stats
+
+# Verificar número de leituras no DynamoDB
+aws dynamodb scan --table-name mundotalendo-danielbalieiro-LeiturasTable-hdkkstmu \
+  --select COUNT --region us-east-2
+```
+
+**Para testes locais:**
+- Use ambiente local com mock data
+- Configure `NEXT_PUBLIC_API_URL=/api` no `.env.local`
+- Ou crie table DynamoDB separada para testes
 
 ## ⚠️ Avisos Importantes
 
-1. **Não usar "conquista" ou "conquered"** - projeto é sobre descoberta cultural
-2. **Labels devem estar em português** - sempre PT-BR
-3. **1 label por país** - usar centroids, não vector tiles
-4. **Cores vibrantes** - oceano azul, países com cores dos meses
-5. **SST 3.17.25 tem bug** - workaround manual necessário
-6. **Não usar react-map-gl** - implementação direta MapLibre
-7. **Webpack, não Turbopack** - via npm run dev:local
-8. **Tailwind CSS v4** - nova sintaxe com @tailwindcss/postcss
+1. **🔴 SISTEMA EM PRODUÇÃO** - Dados reais de participantes, mudanças exigem extremo cuidado
+2. **Não usar "conquista" ou "conquered"** - projeto é sobre descoberta cultural
+3. **Labels devem estar em português** - sempre PT-BR
+4. **1 label por país** - usar centroids, não vector tiles
+5. **Cores vibrantes** - oceano azul, países com cores dos meses
+6. **SST 3.17.25 tem bug** - workaround manual necessário
+7. **Não usar react-map-gl** - implementação direta MapLibre
+8. **Webpack, não Turbopack** - via npm run dev:local
+9. **Tailwind CSS v4** - nova sintaxe com @tailwindcss/postcss
+10. **🚫 NÃO executar** `make seed` ou `make clear` em produção - apenas em testes locais
 
 ## 🔗 Links Úteis
 
@@ -538,4 +602,21 @@ O endpoint `/webhook` espera payload do Maratona.app com estrutura:
 
 ---
 
-**Última observação:** Mantenha esta documentação atualizada conforme o projeto evolui. É a fonte de verdade para contexto técnico em futuras sessões.
+## 📝 Notas Finais
+
+**🔴 LEMBRETE CRÍTICO:** Este projeto está **EM PRODUÇÃO** com **dados reais de participantes**.
+
+Qualquer mudança no código, schema de dados, ou lógica de processamento pode impactar:
+- Leituras já registradas no DynamoDB
+- Experiência de usuários ativos
+- Integridade dos dados históricos
+- Funcionamento do webhook em produção
+
+**Antes de fazer qualquer alteração:**
+1. Leia atentamente a seção "🚨 ATENÇÃO: SISTEMA EM PRODUÇÃO" acima
+2. Teste exaustivamente em ambiente local
+3. Valide compatibilidade com dados existentes
+4. Documente mudanças neste arquivo
+5. Tenha um plano de rollback preparado
+
+**Esta documentação** deve ser mantida atualizada conforme o projeto evolui. É a fonte de verdade para contexto técnico em futuras sessões.
