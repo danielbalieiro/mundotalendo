@@ -97,6 +97,25 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 4. **Performance:** Polling 60s (stats + users), paginação DynamoDB, validações robustas
 5. **Segurança:** CORS restrito, input validation, API key authentication, proxy de imagens
 
+### 🧹 Cleanup us-east-1 (23 Dez 2025)
+
+**Problema:** Recursos antigos foram criados acidentalmente em **us-east-1** (Virginia) com stage "danielbalieiro"
+
+**Causa:** SST usa o nome do usuário git como stage padrão quando `--stage` não é especificado. Recursos foram criados na região errada durante testes iniciais.
+
+**Solução:** Todos os recursos em us-east-1 foram deletados com sucesso:
+- ✅ 1 CloudFormation stack (`danielbalieiro-mundotalendo-Stack`)
+- ✅ 5 Lambda functions
+- ✅ 1 DynamoDB table (vazia)
+- ✅ 1 API Gateway
+- ✅ 4 CloudWatch Log Groups
+
+**Região oficial do projeto:** **us-east-2** (Ohio)
+- Prod: `mundotalendo-prod-*`
+- Dev: `mundotalendo-dev-*`
+
+**IMPORTANTE:** Sempre usar `--region us-east-2` em comandos AWS CLI
+
 ### 🔧 SST Transform Fix (Crítico)
 
 **Problema resolvido:** Variáveis de ambiente não eram configuradas automaticamente

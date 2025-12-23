@@ -1,5 +1,9 @@
 .PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
+# ⚠️ IMPORTANT: This project uses us-east-2 (Ohio) region
+# All AWS commands MUST use --region us-east-2
+# Resources in us-east-1 were deleted on 2025-12-23
+
 # Variables
 API_DEV := https://api.dev.mundotalendo.com.br
 API_PROD := https://api.mundotalendo.com.br
