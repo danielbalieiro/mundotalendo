@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed clear logs-webhook logs-stats unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
 # Variables
 API_DEV := https://api.dev.mundotalendo.com.br
@@ -274,13 +274,56 @@ logs-stats: ## Show stats Lambda logs
 		echo "$(RED)Stats Lambda not found$(NC)"; \
 	fi
 
+# Monitoring - DEV
+alarms: ## Show CloudWatch alarm status (DEV)
+	@echo "$(GREEN)CloudWatch Alarms Status - DEV:$(NC)"
+	@aws cloudwatch describe-alarms --region $(REGION) \
+		--query 'MetricAlarms[?contains(AlarmName, `mundotalendo-dev`)].{Name:AlarmName,State:StateValue,Reason:StateReason}' \
+		--output table
+
+metrics: ## Show custom metrics (DEV)
+	@echo "$(GREEN)Custom Metrics - DEV:$(NC)"
+	@aws cloudwatch list-metrics --region $(REGION) \
+		--namespace MundoTaLendo --output table
+
+logs-all: ## Tail all Lambda logs in real-time (DEV)
+	@echo "$(GREEN)Tailing DEV Lambda logs...$(NC)"
+	@aws logs tail --follow --region $(REGION) \
+		--log-group-name-prefix /aws/lambda/mundotalendo-dev
+
+# Monitoring - PROD
+alarms-prod: ## Show CloudWatch alarm status (PROD)
+	@echo "$(GREEN)CloudWatch Alarms Status - PROD:$(NC)"
+	@aws cloudwatch describe-alarms --region $(REGION) \
+		--query 'MetricAlarms[?contains(AlarmName, `mundotalendo-prod`)].{Name:AlarmName,State:StateValue,Reason:StateReason}' \
+		--output table
+
+metrics-prod: ## Show custom metrics (PROD)
+	@echo "$(GREEN)Custom Metrics - PROD:$(NC)"
+	@aws cloudwatch list-metrics --region $(REGION) \
+		--namespace MundoTaLendo --output table
+
+logs-all-prod: ## Tail all Lambda logs in real-time (PROD)
+	@echo "$(GREEN)Tailing PROD Lambda logs...$(NC)"
+	@aws logs tail --follow --region $(REGION) \
+		--log-group-name-prefix /aws/lambda/mundotalendo-prod
+
 # AWS Info
-info: ## Show AWS resources information
-	@echo "$(GREEN)AWS Resources - Stage: dev$(NC)"
+info: ## Show AWS resources information (DEV)
+	@echo "$(GREEN)AWS Resources - Stage: DEV$(NC)"
 	@echo "\n$(YELLOW)DynamoDB Tables:$(NC)"
 	@aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev`)]' --output table
 	@echo "\n$(YELLOW)Lambda Functions:$(NC)"
 	@aws lambda list-functions --region $(REGION) --query 'Functions[?contains(FunctionName, `mundotalendo-dev`)].FunctionName' --output table
+	@echo "\n$(YELLOW)API Gateway:$(NC)"
+	@aws apigatewayv2 get-apis --region $(REGION) --query 'Items[?contains(Name, `mundotalendo`)].{Name:Name,Endpoint:ApiEndpoint}' --output table
+
+info-prod: ## Show AWS resources information (PROD)
+	@echo "$(GREEN)AWS Resources - Stage: PROD$(NC)"
+	@echo "\n$(YELLOW)DynamoDB Tables:$(NC)"
+	@aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-prod`)]' --output table
+	@echo "\n$(YELLOW)Lambda Functions:$(NC)"
+	@aws lambda list-functions --region $(REGION) --query 'Functions[?contains(FunctionName, `mundotalendo-prod`)].FunctionName' --output table
 	@echo "\n$(YELLOW)API Gateway:$(NC)"
 	@aws apigatewayv2 get-apis --region $(REGION) --query 'Items[?contains(Name, `mundotalendo`)].{Name:Name,Endpoint:ApiEndpoint}' --output table
 

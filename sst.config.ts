@@ -147,6 +147,374 @@ export default $config({
             : undefined,
     });
 
+    // ============================================
+    // MONITORING & ALERTING (PROD only)
+    // ============================================
+
+    const logRetentionDays = 14;
+    const metricNamespace = "MundoTaLendo";
+    const isProduction = $app.stage === "prod";
+
+    // Log Groups with Retention
+    const webhookLogGroup = new aws.cloudwatch.LogGroup("WebhookLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-webhook`,
+      retentionInDays: logRetentionDays,
+    });
+
+    const statsLogGroup = new aws.cloudwatch.LogGroup("StatsLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-stats`,
+      retentionInDays: logRetentionDays,
+    });
+
+    const usersLogGroup = new aws.cloudwatch.LogGroup("UsersLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-users`,
+      retentionInDays: logRetentionDays,
+    });
+
+    const seedLogGroup = new aws.cloudwatch.LogGroup("SeedLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-seed`,
+      retentionInDays: logRetentionDays,
+    });
+
+    const clearLogGroup = new aws.cloudwatch.LogGroup("ClearLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-clear`,
+      retentionInDays: logRetentionDays,
+    });
+
+    // Metric Filters (PROD only)
+    if (isProduction) {
+    new aws.cloudwatch.LogMetricFilter("WebhookCountryNotFoundMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "CountryNotFoundErrors",
+      pattern: '"Country not found:"',
+      metricTransformation: {
+        name: "CountryNotFoundErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("WebhookUnmarshalErrorMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "UnmarshalErrors",
+      pattern: '"Error parsing payload:"',
+      metricTransformation: {
+        name: "UnmarshalErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("WebhookDynamoPutErrorMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "DynamoPutErrors",
+      pattern: '"Error saving to DynamoDB:"',
+      metricTransformation: {
+        name: "DynamoPutErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("WebhookPayloadTooLargeMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "PayloadTooLargeErrors",
+      pattern: '"Payload too large:"',
+      metricTransformation: {
+        name: "PayloadTooLargeCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("StatsDynamoQueryErrorMetric", {
+      logGroupName: statsLogGroup.name,
+      name: "StatsQueryErrors",
+      pattern: '"Error querying DynamoDB:"',
+      metricTransformation: {
+        name: "StatsQueryErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("UsersDynamoQueryErrorMetric", {
+      logGroupName: usersLogGroup.name,
+      name: "UsersQueryErrors",
+      pattern: '"Error querying DynamoDB:"',
+      metricTransformation: {
+        name: "UsersQueryErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("WebhookAuthFailureMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "WebhookAuthFailures",
+      pattern: '"Unauthorized: invalid API key"',
+      metricTransformation: {
+        name: "WebhookAuthFailureCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("StatsAuthFailureMetric", {
+      logGroupName: statsLogGroup.name,
+      name: "StatsAuthFailures",
+      pattern: '"Unauthorized: invalid API key"',
+      metricTransformation: {
+        name: "StatsAuthFailureCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("UsersAuthFailureMetric", {
+      logGroupName: usersLogGroup.name,
+      name: "UsersAuthFailures",
+      pattern: '"Unauthorized: invalid API key"',
+      metricTransformation: {
+        name: "UsersAuthFailureCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    // SNS Topic for Alarms
+    const alarmTopic = new aws.sns.Topic("AlarmTopic", {
+      displayName: `Mundo Tá Lendo - ${$app.stage.toUpperCase()} Alerts`,
+    });
+
+    new aws.sns.TopicSubscription("AlarmEmailSubscription", {
+      topic: alarmTopic.arn,
+      protocol: "email",
+      endpoint: "daniel@balieiro.com",
+    });
+
+    // CloudWatch Alarms (Custom Metrics + DynamoDB)
+    new aws.cloudwatch.MetricAlarm("DynamoPutErrorAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-webhook-dynamo-put-error`,
+      alarmDescription: "CRITICAL: DynamoDB writes failing - DATA LOSS RISK",
+      metricName: "DynamoPutErrorCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("CountryNotFoundAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-webhook-country-not-found`,
+      alarmDescription: "WARNING: Unmapped countries detected - add to mapping/countries.go",
+      metricName: "CountryNotFoundErrorCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("UnmarshalErrorAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-webhook-unmarshal-error`,
+      alarmDescription: "WARNING: JSON parsing errors in webhook",
+      metricName: "UnmarshalErrorCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("StatsQueryErrorAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-stats-query-error`,
+      alarmDescription: "CRITICAL: Stats endpoint DynamoDB query failures",
+      metricName: "StatsQueryErrorCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 5,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("UsersQueryErrorAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-users-query-error`,
+      alarmDescription: "CRITICAL: Users endpoint DynamoDB query failures",
+      metricName: "UsersQueryErrorCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 5,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("DynamoReadThrottleAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-dynamo-read-throttle`,
+      alarmDescription: "CRITICAL: DynamoDB reads being throttled - increase capacity",
+      metricName: "UserErrors",
+      namespace: "AWS/DynamoDB",
+      dimensions: {
+        TableName: dataTable.name,
+      },
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 5,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("DynamoWriteThrottleAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-dynamo-write-throttle`,
+      alarmDescription: "CRITICAL: DynamoDB writes being throttled - increase capacity",
+      metricName: "WriteThrottleEvents",
+      namespace: "AWS/DynamoDB",
+      dimensions: {
+        TableName: dataTable.name,
+      },
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("AuthFailureAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-auth-failures`,
+      alarmDescription: "SECURITY: High auth failures - possible brute force attack",
+      metricName: "WebhookAuthFailureCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 20,
+      comparisonOperator: "GreaterThanThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    // CloudWatch Dashboard
+    const dashboard = new aws.cloudwatch.Dashboard("ProductionDashboard", {
+      dashboardName: `${$app.name}-${$app.stage}-dashboard`,
+      dashboardBody: $jsonStringify({
+        widgets: [
+          {
+            type: "metric",
+            x: 0,
+            y: 0,
+            width: 12,
+            height: 6,
+            properties: {
+              title: "API Error Rates (5 min)",
+              metrics: [
+                ["AWS/Lambda", "Errors", { stat: "Sum", label: "Total Errors", color: "#d62728" }],
+              ],
+              period: 300,
+              region: "us-east-2",
+              yAxis: { left: { min: 0 } },
+            },
+          },
+          {
+            type: "metric",
+            x: 12,
+            y: 0,
+            width: 12,
+            height: 6,
+            properties: {
+              title: "API Latency (Average)",
+              metrics: [
+                ["AWS/Lambda", "Duration", { stat: "Average", label: "Avg Duration", color: "#1f77b4" }],
+              ],
+              period: 300,
+              region: "us-east-2",
+              yAxis: { left: { label: "Milliseconds", min: 0 } },
+            },
+          },
+          {
+            type: "metric",
+            x: 0,
+            y: 6,
+            width: 12,
+            height: 6,
+            properties: {
+              title: "Webhook Error Breakdown",
+              metrics: [
+                [metricNamespace, "CountryNotFoundErrorCount", { stat: "Sum", color: "#ff7f0e" }],
+                ["...", "UnmarshalErrorCount", { stat: "Sum", color: "#d62728" }],
+                ["...", "DynamoPutErrorCount", { stat: "Sum", color: "#9467bd" }],
+              ],
+              period: 300,
+              region: "us-east-2",
+              stacked: true,
+            },
+          },
+          {
+            type: "metric",
+            x: 12,
+            y: 6,
+            width: 12,
+            height: 6,
+            properties: {
+              title: "DynamoDB Health",
+              metrics: [
+                ["AWS/DynamoDB", "UserErrors", "TableName", dataTable.name],
+              ],
+              period: 300,
+              region: "us-east-2",
+              stat: "Sum",
+              yAxis: { left: { min: 0 } },
+            },
+          },
+        ],
+      }),
+    });
+    } // End of isProduction monitoring block
+
     return {
       api: api.url,
       web: web.url,
