@@ -131,7 +131,7 @@ export default $config({
           ? `https://${api.domain.name}`
           : api.url,
         NEXT_PUBLIC_API_KEY: new sst.Secret("FrontendApiKey").value,
-        NEXT_PUBLIC_SHOW_USER_MARKERS: $app.stage === "prod" ? "false" : "true", // Feature flag: OFF in prod until validated
+        NEXT_PUBLIC_SHOW_USER_MARKERS: "true", // User markers enabled for all stages
       },
       domain:
         $app.stage === "prod"

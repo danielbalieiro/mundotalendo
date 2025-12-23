@@ -48,6 +48,8 @@ unlock: ## Unlock stuck deployment
 
 deploy-dev: ## Deploy to dev environment and fix env vars
 	@echo "$(GREEN)Deploying to DEV...$(NC)"
+	@echo "\n$(YELLOW)Syncing API key to SST Secret before deploy...$(NC)"
+	@$(MAKE) update-secret
 	@npx sst deploy --stage dev
 	@echo "\n$(YELLOW)Fixing Lambda environment variables (SST bug workaround)...$(NC)"
 	@$(MAKE) fix-env
@@ -59,9 +61,11 @@ deploy-prod: ## Deploy to prod environment and fix env vars
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "\n$(YELLOW)Syncing API key to SST Secret before deploy...$(NC)"; \
+		STAGE=prod $(MAKE) update-secret; \
 		npx sst deploy --stage prod; \
 		echo "\n$(YELLOW)Fixing Lambda environment variables (SST bug workaround)...$(NC)"; \
-		$(MAKE) fix-env; \
+		STAGE=prod $(MAKE) fix-env; \
 	else \
 		echo "Deploy cancelled."; \
 	fi
@@ -75,12 +79,23 @@ dev: ## Start local Next.js server
 	@echo "$(GREEN)Starting local server...$(NC)"
 	@npm run dev:local
 
-update-env-local: ## Update .env.local with current API key
+update-secret: ## Update SST Secret with current API key from DynamoDB
+	@echo "$(YELLOW)Syncing SST Secret with DynamoDB API key...$(NC)"
 	@API_KEY=$$($(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Creating one...$(NC)"; \
-		$(MAKE) create-api-key name=frontend; \
+		$(MAKE) create-api-key name=dev-test; \
 		API_KEY=$$($(MAKE) -s get-api-key); \
+	fi; \
+	STAGE=$${STAGE:-dev}; \
+	npx sst secret set FrontendApiKey "$$API_KEY" --stage $$STAGE; \
+	echo "$(GREEN)✅ SST Secret updated with: $$API_KEY$(NC)"
+
+update-env-local: ## Update .env.local with current API key
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found in DynamoDB$(NC)"; \
+		exit 1; \
 	fi; \
 	echo "# Development API URL - configured in sst.config.ts for stage 'dev'" > .env.local; \
 	echo "NEXT_PUBLIC_API_URL=$(API_DEV)" >> .env.local; \
@@ -127,7 +142,8 @@ deploy-local: ## Deploy to DEV, fix env vars, validate, and start local server
 
 # API Testing (requires API key)
 get-api-key: ## Get first active API key for testing
-	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	@STAGE=$${STAGE:-dev}; \
+	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, \`mundotalendo-$$STAGE-DataTable\`)]" --output text); \
 	aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
 		--filter-expression "begins_with(PK, :pk) AND #active = :active" \
 		--expression-attribute-names '{"#active":"active"}' \
@@ -295,11 +311,12 @@ check-failures: ## Show recent failures from Falhas table
 
 fix-env: ## Fix Lambda environment variables (SST bug workaround)
 	@echo "$(YELLOW)Fixing Lambda environment variables...$(NC)"
-	@DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query 'TableNames[?contains(@, `mundotalendo-dev-DataTable`)]' --output text); \
+	@STAGE=$${STAGE:-dev}; \
+	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, \`mundotalendo-$$STAGE-DataTable\`)]" --output text); \
 	echo "$(GREEN)Found table:$(NC)"; \
 	echo "  DataTable: $$DATA_TABLE"; \
 	echo "\n$(YELLOW)Updating Lambda functions...$(NC)"; \
-	for fn in $$(aws lambda list-functions --region $(REGION) --query 'Functions[?contains(FunctionName, `mundotalendo-dev-ApiRoute`)].FunctionName' --output text); do \
+	for fn in $$(aws lambda list-functions --region $(REGION) --query "Functions[?contains(FunctionName, \`mundotalendo-$$STAGE-ApiRoute\`)].FunctionName" --output text); do \
 		echo "  Updating $$fn..."; \
 		aws lambda update-function-configuration \
 			--function-name $$fn \
