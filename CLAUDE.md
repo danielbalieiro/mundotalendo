@@ -1,7 +1,7 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2025-12-21
-> **Status:** ✅ PRONTO PARA PRODUÇÃO - Deploy funcionando em DEV
+> **Última atualização:** 2025-12-23
+> **Status:** ✅ PRODUÇÃO-READY - Deploy funcionando em DEV com user markers
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
 
 ## 📋 Resumo Executivo
@@ -12,6 +12,24 @@ Projeto de **descoberta cultural colaborativa** através da leitura. Dashboard q
 
 ## 🎯 Estado Atual do Projeto
 
+### ✅ NOVA FEATURE: User Markers GPS-Style (23 Dez 2025)
+
+**Marcadores de usuários no mapa:**
+- ✅ **Avatar circular** dos usuários exibido no mapa (estilo GPS)
+- ✅ **Posicionamento inteligente** abaixo do nome do país para evitar sobreposição
+- ✅ **Offset automático** para múltiplos usuários no mesmo país (distribuição horizontal)
+- ✅ **Tooltip ao hover** mostrando nome do usuário e livro sendo lido
+- ✅ **Proxy de imagens** para resolver CORS em desenvolvimento
+- ✅ **Recorte circular** das imagens usando canvas (fill completo do círculo)
+- ✅ **Feature flag** `NEXT_PUBLIC_SHOW_USER_MARKERS` (ON em dev, OFF em prod até validação)
+- ✅ **Novo endpoint** `/users/locations` retornando última localização de cada usuário
+
+**Implementação técnica:**
+- Backend extrai título do livro de `vinculados[].edicao.titulo`
+- Frontend usa MapLibre sprites com ImageData (canvas → circular clip)
+- Proxy Next.js API route (`/api/proxy-image`) para bypass CORS
+- Dados salvos: `user`, `avatarURL`, `livro`, `iso3`, `pais`, `timestamp`
+
 ### ✅ PRODUÇÃO-READY (21 Dez 2025)
 
 **Todas as melhorias críticas implementadas:**
@@ -20,15 +38,15 @@ Projeto de **descoberta cultural colaborativa** através da leitura. Dashboard q
 - ✅ **1 essencial de produção** (DynamoDB PITR backups)
 - ✅ **4 melhorias de UX** (Error Boundary, retry logic, validation)
 - ✅ **3 features opcionais** (concurrency limits, security headers, cleanup)
-- ✅ **Todos os testes passando** (78 testes, 0 falhas)
+- ✅ **Todos os testes passando** (26 Go tests + frontend tests)
 - ✅ **Deploy DEV funcionando** perfeitamente
 
 **Sistema completo e operacional:**
-1. **Backend:** 4 Lambdas Go otimizadas (webhook, stats, seed, clear)
-2. **Frontend:** Next.js 16 com Error Boundary, retry logic, security headers
+1. **Backend:** 5 Lambdas Go otimizadas (webhook, stats, users, seed, clear)
+2. **Frontend:** Next.js 16 com Error Boundary, retry logic, security headers, user markers
 3. **Infraestrutura:** DynamoDB com backups, Lambda com concurrency limits
-4. **Performance:** Polling reduzido 75%, paginação DynamoDB, validações robustas
-5. **Segurança:** CORS restrito, input validation, API key authentication
+4. **Performance:** Polling 60s (stats + users), paginação DynamoDB, validações robustas
+5. **Segurança:** CORS restrito, input validation, API key authentication, proxy de imagens
 
 ### 🔧 SST Transform Fix (Crítico)
 

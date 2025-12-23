@@ -37,6 +37,8 @@ This is a **collaborative** project about **discovering cultures** through readi
 - 🔁 **Auto-retry** - 3 attempts with exponential backoff on API failures
 - 🔐 **Security headers** - X-Frame-Options, X-Content-Type-Options
 - ⚡ **Performance** - Lambda concurrency limits, DynamoDB pagination, PITR backups
+- 📍 **User markers** - GPS-style circular avatars showing latest user location (DEV only)
+- 📖 **Book tracking** - Hover tooltips display current book being read
 
 ## 🏗️ Architecture
 
@@ -78,6 +80,9 @@ mundotalendo/
 │   │   ├── layout.js           # Root layout with Error Boundary
 │   │   ├── page.js             # Main page with collapsible legend
 │   │   ├── globals.css         # Styles + MapLibre CSS
+│   │   ├── api/
+│   │   │   └── proxy-image/    # CORS proxy for user avatars
+│   │   │       └── route.js
 │   │   └── test-colors/        # Color testing page
 │   │       └── page.js         # Visual validation of 60 color combinations
 │   ├── components/
@@ -89,7 +94,8 @@ mundotalendo/
 │   │   ├── countryCentroids.js # 1 exact point per country (no duplicates)
 │   │   └── months.js           # 12 months → 5-tier color gradients (60 colors)
 │   ├── hooks/
-│   │   └── useStats.js         # SWR with retry logic, 60s polling, 10s timeout
+│   │   ├── useStats.js         # SWR with retry logic, 60s polling, 10s timeout
+│   │   └── useUserLocations.js # SWR hook for user marker locations (60s polling)
 │   └── utils/
 │       ├── colorTiers.js       # Tier calculation utilities
 │       └── logger.js           # Conditional logging (dev only)
@@ -104,6 +110,9 @@ mundotalendo/
 │   │   ├── main.go
 │   │   └── go.mod
 │   ├── stats/                  # GET /stats - Return country progress
+│   │   ├── main.go
+│   │   └── go.mod
+│   ├── users/                  # GET /users/locations - Return user locations with avatars
 │   │   ├── main.go
 │   │   └── go.mod
 │   ├── seed/                   # POST /test/seed - Generate test data
@@ -129,10 +138,12 @@ mundotalendo/
 Receives reading events from Maratona.app
 
 **Validations:**
-- ✅ Filters by `identificador = "maratona-lendo-paises"`
+- ✅ Filters by `identificador = "maratona-lendo-paises"` OR `"mundotalendo-2026"`
 - ✅ Accepts `tipo = "leitura"` OR `"atividade"`
 - ✅ If `concluido = true`, forces progress = 100%
 - ✅ Calculates maximum progress among vinculados
+- ✅ Extracts book title from `vinculados[].edicao.titulo`
+- ✅ Saves user avatar URL from `perfil.imagem`
 - ✅ Saves complete payload in JSON metadata
 - ✅ Logs failures in separate table
 
@@ -175,11 +186,12 @@ Receives reading events from Maratona.app
 {
   "perfil": {
     "nome": "Nathy",
-    "link": "https://maratona.app/u/nathytalendo"
+    "link": "https://maratona.app/u/nathytalendo",
+    "imagem": "https://assets.maratona.app/uploads/users/nathy/avatar.png"
   },
   "maratona": {
     "nome": "Maratona lendo países",
-    "identificador": "maratona-lendo-paises"
+    "identificador": "mundotalendo-2026"
   },
   "desafios": [
     {
@@ -189,7 +201,10 @@ Receives reading events from Maratona.app
       "vinculados": [
         {
           "progresso": 85,
-          "updatedAt": "2024-12-16T10:00:00Z"
+          "updatedAt": "2024-12-16T10:00:00Z",
+          "edicao": {
+            "titulo": "The Silmarillion"
+          }
         }
       ]
     }
@@ -211,6 +226,45 @@ Returns explored countries with progress
   "total": 3
 }
 ```
+
+### `GET /users/locations`
+Returns latest location per user with avatar and book info (for map markers)
+
+**How it works:**
+- Queries all reading events from DynamoDB
+- Finds most recent reading per user (using SK timestamp)
+- Returns user location, avatar URL, and current book title
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "user": "DanZaekald",
+      "avatarURL": "https://assets.maratona.app/uploads/users/danzaekald/avatar.png",
+      "iso3": "MAR",
+      "pais": "Marrocos",
+      "livro": "The Silmarillion",
+      "timestamp": "TIMESTAMP#2025-12-23T14:00:00Z#0"
+    },
+    {
+      "user": "Nathy",
+      "avatarURL": "https://assets.maratona.app/uploads/users/nathy/avatar.png",
+      "iso3": "BRA",
+      "pais": "Brasil",
+      "livro": "Dom Casmurro",
+      "timestamp": "TIMESTAMP#2025-12-22T10:00:00Z#0"
+    }
+  ],
+  "total": 2
+}
+```
+
+**Frontend Integration:**
+- Hook: `useUserLocations()` polls this endpoint every 60s
+- Map renders GPS-style circular avatars at country centroids
+- Tooltip shows: "📍 {user} - Lendo: {livro}"
+- Feature flag: `NEXT_PUBLIC_SHOW_USER_MARKERS` (ON in dev, OFF in prod initially)
 
 ### `POST /test/seed`
 Populates database with random data (development)
@@ -358,6 +412,9 @@ NEXT_PUBLIC_API_URL=https://api.dev.mundotalendo.com.br
 
 # API Key (create with: make create-api-key name=frontend)
 NEXT_PUBLIC_API_KEY=frontend-uuid-date
+
+# Feature flag: Show user markers on map (default: true in dev, false in prod)
+NEXT_PUBLIC_SHOW_USER_MARKERS=true
 ```
 
 ### Development
