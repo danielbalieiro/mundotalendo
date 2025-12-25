@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -86,7 +87,7 @@ func deleteOldUserReadings(ctx context.Context, user string) error {
 		return nil
 	}
 
-	// Deletar cada item encontrado
+	// Deletar cada item encontrado (apenas EVENT#LEITURA, não WEBHOOK#PAYLOAD)
 	deletedCount := 0
 	for _, item := range result.Items {
 		pkAttr, okPK := item["PK"].(*ddbtypes.AttributeValueMemberS)
@@ -94,6 +95,11 @@ func deleteOldUserReadings(ctx context.Context, user string) error {
 
 		if !okPK || !okSK {
 			log.Printf("WARN: Invalid item structure, skipping deletion")
+			continue
+		}
+
+		// Skip deletion if PK is not an EVENT#LEITURA (protects WEBHOOK#PAYLOAD from being deleted)
+		if !strings.HasPrefix(pkAttr.Value, "EVENT#LEITURA") {
 			continue
 		}
 
@@ -240,7 +246,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	var errors []ErrorDetail
 
 	// Process each desafio
-	for _, desafio := range payload.Desafios {
+	for i, desafio := range payload.Desafios {
 		// Filter: only process "leitura" or "atividade" types
 		if desafio.Tipo != "leitura" && desafio.Tipo != "atividade" {
 			continue
@@ -310,20 +316,22 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			continue
 		}
 
-		// Create DynamoDB item with UUID-based keys
-		// UUID groups all countries from this webhook execution
-		// Payload is saved separately in WebhookItem (no duplication!)
+		// Create DynamoDB item (v1.0.3: PK simples + SK único + UUID field)
+		// PK simples permite queries stats/users funcionarem
+		// SK com UUID+ISO+index garante unicidade (múltiplos livros por país)
+		// Payload salvo separadamente em WebhookItem (zero duplicação!)
 		item := types.LeituraItem{
-			PK:        fmt.Sprintf("EVENT#LEITURA#%s", webhookUUID),
-			SK:        fmt.Sprintf("COUNTRY#%s", iso3),
-			ISO3:      iso3,
-			Pais:      cleanedCountryName,
-			Categoria: cleanedCategoria,
-			Progresso: maxProgress,
-			User:      user,
-			ImagemURL: payload.Perfil.Imagem, // Salvar avatar do usuário
-			Livro:     bookTitle,              // Título do livro sendo lido
-			// Metadata REMOVED - payload is saved separately in WebhookItem
+			PK:          "EVENT#LEITURA",                                // PK simples para queries
+			SK:          fmt.Sprintf("%s#%s#%d", webhookUUID, iso3, i), // SK único com índice
+			ISO3:        iso3,
+			Pais:        cleanedCountryName,
+			Categoria:   cleanedCategoria,
+			Progresso:   maxProgress,
+			User:        user,
+			ImagemURL:   payload.Perfil.Imagem,
+			Livro:       bookTitle,
+			WebhookUUID: webhookUUID,                       // UUID separado para rastreamento
+			UpdatedAt:   latestUpdate.Format(time.RFC3339), // Timestamp do último update
 		}
 
 		// Save to DynamoDB

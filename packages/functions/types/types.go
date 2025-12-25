@@ -46,12 +46,12 @@ type Vinculado struct {
 
 // DynamoDB item structures
 
-// LeituraItem - Item de leitura (país) agrupado por UUID do webhook
-// PK: "EVENT#LEITURA#<uuid>" - agrupa todos os eventos do mesmo webhook
-// SK: "COUNTRY#<iso3>" - identifica o país dentro do webhook
+// LeituraItem - Item de leitura (país) com rastreamento UUID
+// PK: "EVENT#LEITURA" - agrupa todos os eventos de leitura
+// SK: "<uuid>#<iso3>#<index>" - identifica livro único (UUID + país + índice)
 type LeituraItem struct {
-	PK        string `dynamodbav:"PK"`        // "EVENT#LEITURA#<uuid>"
-	SK        string `dynamodbav:"SK"`        // "COUNTRY#<iso3>"
+	PK        string `dynamodbav:"PK"`        // "EVENT#LEITURA"
+	SK        string `dynamodbav:"SK"`        // "<uuid>#<iso3>#<index>"
 	ISO3      string `dynamodbav:"iso3"`      // Código ISO 3166-1 Alpha-3
 	Pais      string `dynamodbav:"pais"`      // Nome do país em português
 	Categoria string `dynamodbav:"categoria"` // Mês/categoria do desafio
@@ -59,7 +59,10 @@ type LeituraItem struct {
 	User      string `dynamodbav:"user"`      // Nome do usuário
 	ImagemURL string `dynamodbav:"imagemURL"` // URL do avatar do usuário
 	Livro     string `dynamodbav:"livro"`     // Título do livro sendo lido
-	// Metadata REMOVIDO - payload está em WebhookItem separado!
+
+	// v1.0.3: UUID separado para rastreamento + timestamp de update
+	WebhookUUID string `dynamodbav:"webhookUUID"` // UUID da execução do webhook
+	UpdatedAt   string `dynamodbav:"updatedAt"`   // RFC3339 timestamp do último update
 }
 
 // WebhookItem - Item de webhook payload (salvo UMA VEZ por execução)

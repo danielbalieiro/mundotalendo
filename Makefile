@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
 # ⚠️ IMPORTANT: This project uses us-east-2 (Ohio) region
 # All AWS commands MUST use --region us-east-2
@@ -52,6 +52,13 @@ unlock: ## Unlock stuck deployment
 
 deploy-dev: ## Deploy to dev environment and fix env vars
 	@echo "$(GREEN)Deploying to DEV...$(NC)"
+	@echo "\n$(YELLOW)Force rebuilding Go functions...$(NC)"
+	@find packages/functions -type f -name "bootstrap" | xargs rm -f
+	@cd packages/functions/webhook && go build -o bootstrap main.go
+	@cd packages/functions/stats && go build -o bootstrap main.go
+	@cd packages/functions/users && go build -o bootstrap main.go
+	@cd packages/functions/seed && go build -o bootstrap main.go
+	@cd packages/functions/clear && go build -o bootstrap main.go
 	@echo "\n$(YELLOW)Syncing API key to SST Secret before deploy...$(NC)"
 	@$(MAKE) update-secret
 	@npx sst deploy --stage dev
@@ -65,6 +72,13 @@ deploy-prod: ## Deploy to prod environment and fix env vars
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "\n$(YELLOW)Force rebuilding Go functions...$(NC)"; \
+		find packages/functions -type f -name "bootstrap" | xargs rm -f; \
+		(cd packages/functions/webhook && go build -o bootstrap main.go); \
+		(cd packages/functions/stats && go build -o bootstrap main.go); \
+		(cd packages/functions/users && go build -o bootstrap main.go); \
+		(cd packages/functions/seed && go build -o bootstrap main.go); \
+		(cd packages/functions/clear && go build -o bootstrap main.go); \
 		echo "\n$(YELLOW)Syncing API key to SST Secret before deploy...$(NC)"; \
 		STAGE=prod $(MAKE) update-secret; \
 		npx sst deploy --stage prod; \
@@ -147,12 +161,16 @@ deploy-local: ## Deploy to DEV, fix env vars, validate, and start local server
 # API Testing (requires API key)
 get-api-key: ## Get first active API key for testing
 	@STAGE=$${STAGE:-dev}; \
-	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, \`mundotalendo-$$STAGE-DataTable\`)]" --output text); \
+	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, 'mundotalendo-$$STAGE-DataTable')]" --output text); \
+	if [ -z "$$DATA_TABLE" ]; then \
+		echo "None"; \
+		exit 0; \
+	fi; \
 	aws dynamodb scan --region $(REGION) --table-name $$DATA_TABLE \
 		--filter-expression "begins_with(PK, :pk) AND #active = :active" \
 		--expression-attribute-names '{"#active":"active"}' \
 		--expression-attribute-values '{":pk":{"S":"APIKEY#"},":active":{"BOOL":true}}' \
-		--query 'Items[0].key.S' --output text
+		--query 'Items[0].key.S' --output text 2>/dev/null | head -1 || echo "None"
 
 # Unit Tests
 check-deps: ## Check if test dependencies are installed
@@ -227,6 +245,16 @@ seed: ## Populate database with random data (count=20)
 		-H "X-API-Key: $$API_KEY" \
 		-d '{"count": 20}' | jq .
 
+stats: ## Get reading statistics from API
+	@echo "$(GREEN)Fetching stats...$(NC)"
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	curl -s $(API_DEV)/stats \
+		-H "X-API-Key: $$API_KEY" | jq .
+
 clear: ## Clear all database tables
 	@echo "$(RED)Clearing database...$(NC)"
 	@API_KEY=$$($(MAKE) -s get-api-key); \
@@ -248,16 +276,53 @@ webhook-test: ## Test webhook with sample payload
 		-H "Content-Type: application/json" \
 		-H "X-API-Key: $$API_KEY" \
 		-d '{ \
-			"perfil": {"nome": "Test User", "link": "https://test.com"}, \
+			"perfil": {"nome": "Test User", "link": "https://test.com", "imagem": "https://assets.maratona.app/uploads/users/21cce56bf08058ce473c58096676adf9a67e940a14958389b50309d93d090b15/ff9f8b72-aca1-4ae7-ba66-66fc75842d06.png"}, \
 			"maratona": {"nome": "Test", "identificador": "maratona-lendo-paises"}, \
 			"desafios": [{ \
 				"descricao": "Brasil", \
 				"categoria": "Janeiro", \
 				"concluido": true, \
 				"tipo": "leitura", \
-				"vinculados": [{"progresso": 85, "updatedAt": "2024-12-16T10:00:00Z"}] \
+				"vinculados": [{"progresso": 85, "updatedAt": "2024-12-16T10:00:00Z", "edicao": {"titulo": "Dom Casmurro"}}] \
 			}] \
 		}' | jq .
+
+webhook-full: ## Send webhook with ALL countries (2-5 books each) in ONE request
+	@echo "$(GREEN)Generating full webhook payload for all countries...$(NC)"
+	@API_KEY=$$($(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	COUNTRIES="Brasil|Portugal|Espanha|França|Itália|Alemanha|Reino Unido|Estados Unidos|Canadá|México|Argentina|Chile|Colômbia|Peru|Uruguai|Japão|China|Coreia do Sul|Índia|Austrália|Nova Zelândia|África do Sul|Egito|Marrocos|Nigéria|Quênia|Gana|Senegal|Rússia|Polônia|Ucrânia|Tchéquia|Hungria|Romênia|Grécia|Turquia|Israel|Irã|Iraque|Arábia Saudita|Emirados Árabes Unidos|Tailândia|Vietnã|Filipinas|Indonésia|Malásia|Singapura|Paquistão|Bangladesh|Sri Lanka|Islândia|Noruega|Suécia|Finlândia|Dinamarca|Irlanda|Países Baixos|Bélgica|Suíça|Áustria|Croácia|Sérvia|Bulgária|Eslovênia|Eslováquia|Estônia|Letônia|Lituânia|Geórgia|Armênia|Azerbaijão|Costa Rica|Panamá|Cuba|Jamaica|República Dominicana|Haiti|Bolívia|Paraguai|Equador|Venezuela|Nicarágua|Honduras|Guatemala|El Salvador|Moçambique|Angola|Etiópia|Tanzânia|Uganda|Ruanda|Camarões|Costa do Marfim|Zâmbia|Zimbábue|Botsuana|Namíbia|Líbano|Jordânia|Síria|Iêmen|Omã|Kuwait|Bahrein|Catar|Afeganistão|Cazaquistão|Uzbequistão|Turcomenistão|Quirguistão|Tajiquistão|Mongólia|Nepal|Butão|Mianmar|Camboja|Laos|Brunei|Timor Leste|Papua-Nova Guiné|Fiji|Samoa|Tonga|Vanuatu|Ilhas Salomão|Malta|Chipre|Luxemburgo|Mônaco|Liechtenstein|Andorra|Vaticano|San Marino|Albânia|Macedônia do Norte|Bósnia-Herzegóvina|Montenegro|Moldávia|Bielorrússia|Argélia|Tunísia|Líbia|Sudão|Sudão do Sul|Somália|Eritreia|Djibouti|Mauritânia|Mali|Níger|Chade|Burkina Faso|Benin|Togo|Guiné|Guiné-Bissau|Serra Leoa|Libéria|Guiné Equatorial|Gabão|Congo|República Democrática do Congo|República Centro-Africana|Burundi|Malawi|Madagascar|Maurício|Seychelles|Comores|Cabo Verde|São Tomé e Príncipe|Barbados|Trindade e Tobago|Bahamas|Belize|Guiana|Suriname|Antígua e Barbuda|Santa Lúcia|São Vicente e Grandinas|Granada|Dominica|São Cristóvão e Névis|Maldivas|Coreia do Norte"; \
+	MESES="Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro"; \
+	AVATAR="https://assets.maratona.app/uploads/users/21cce56bf08058ce473c58096676adf9a67e940a14958389b50309d93d090b15/ff9f8b72-aca1-4ae7-ba66-66fc75842d06.png"; \
+	IFS='|' read -ra COUNTRY_ARRAY <<< "$$COUNTRIES"; \
+	IFS='|' read -ra MESES_ARRAY <<< "$$MESES"; \
+	TOTAL=$${#COUNTRY_ARRAY[@]}; \
+	echo "$(YELLOW)Generating payload for $$TOTAL countries (2-5 books each)...$(NC)"; \
+	DESAFIOS=""; \
+	for ((i=0; i<TOTAL; i++)); do \
+		COUNTRY="$${COUNTRY_ARRAY[$$i]}"; \
+		MES="$${MESES_ARRAY[$$((RANDOM % 12))]}"; \
+		NUM_BOOKS=$$((RANDOM % 4 + 2)); \
+		for ((j=0; j<NUM_BOOKS; j++)); do \
+			PROGRESSO=$$((RANDOM % 101)); \
+			DAYS_AGO=$$((RANDOM % 365)); \
+			DATE=$$(date -u -v-$${DAYS_AGO}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "$$DAYS_AGO days ago" +"%Y-%m-%dT%H:%M:%SZ"); \
+			TITULO="Livro $$((j + 1)) de $$COUNTRY"; \
+			if [ -n "$$DESAFIOS" ]; then DESAFIOS="$$DESAFIOS,"; fi; \
+			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\"}}]}"; \
+		done; \
+	done; \
+	PAYLOAD="{\"perfil\":{\"nome\":\"Test User\",\"link\":\"https://maratona.app\",\"imagem\":\"$$AVATAR\"},\"maratona\":{\"nome\":\"Mundo Tá Lendo 2026\",\"identificador\":\"maratona-lendo-paises\"},\"desafios\":[$$DESAFIOS]}"; \
+	echo "$(YELLOW)Sending single request with all countries...$(NC)"; \
+	RESPONSE=$$(curl -s -X POST $(API_DEV)/webhook \
+		-H "Content-Type: application/json" \
+		-H "X-API-Key: $$API_KEY" \
+		-d "$$PAYLOAD"); \
+	echo "$$RESPONSE" | jq .; \
+	echo "\n$(GREEN)✅ Webhook sent! Check stats with: make stats$(NC)"
 
 # Logs
 logs-webhook: ## Show webhook Lambda logs
@@ -359,11 +424,15 @@ check-failures: ## Show recent failures from Falhas table
 fix-env: ## Fix Lambda environment variables (SST bug workaround)
 	@echo "$(YELLOW)Fixing Lambda environment variables...$(NC)"
 	@STAGE=$${STAGE:-dev}; \
-	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, \`mundotalendo-$$STAGE-DataTable\`)]" --output text); \
+	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, 'mundotalendo-$$STAGE-DataTable')]" --output text); \
+	if [ -z "$$DATA_TABLE" ]; then \
+		echo "$(RED)Error: DataTable not found for stage $$STAGE$(NC)"; \
+		exit 1; \
+	fi; \
 	echo "$(GREEN)Found table:$(NC)"; \
 	echo "  DataTable: $$DATA_TABLE"; \
 	echo "\n$(YELLOW)Updating Lambda functions...$(NC)"; \
-	for fn in $$(aws lambda list-functions --region $(REGION) --query "Functions[?contains(FunctionName, \`mundotalendo-$$STAGE-ApiRoute\`)].FunctionName" --output text); do \
+	for fn in $$(aws lambda list-functions --region $(REGION) --query "Functions[?contains(FunctionName, 'mundotalendo-$$STAGE-ApiRoute')].FunctionName" --output text); do \
 		echo "  Updating $$fn..."; \
 		aws lambda update-function-configuration \
 			--function-name $$fn \

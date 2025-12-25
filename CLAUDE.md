@@ -1,9 +1,9 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2025-12-25 (v1.0.2)
+> **Última atualização:** 2025-12-25 (v1.0.3)
 > **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
-> **Versão Atual:** v1.0.2 - UUID Architecture & Storage Optimization
+> **Versão Atual:** v1.0.3 - Critical Bugfixes & Stability
 
 ## 📋 Resumo Executivo
 
@@ -61,6 +61,132 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 - Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
+
+### ✅ v1.0.3: Critical Bugfixes & Stability (25 Dez 2025)
+
+**🔴 CORREÇÃO EMERGENCIAL: v1.0.2 quebrou site inteiro!**
+
+**Três bugs críticos corrigidos:**
+
+1. **Bug #1: PK Mismatch - Stats/Users retornando vazio**
+   - **Problema:** Webhook escrevia `EVENT#LEITURA#<uuid>` mas stats/users consultavam `EVENT#LEITURA`
+   - **Impacto:** DynamoDB queries retornavam 0 resultados → mapa sem cores, sem GPS markers
+   - **Fix:** PK revertido para `"EVENT#LEITURA"`, UUID movido para campo separado `webhookUUID`
+   - **Validação:** `/stats` retornou 174 países, mapa funcional
+
+2. **Bug #2: SK Sobrescrevia Livros Duplicados**
+   - **Problema:** SK usando apenas `COUNTRY#<iso3>` não era único por livro
+   - **Impacto:** Múltiplos livros no mesmo país → apenas último era salvo, perda de dados
+   - **Fix:** SK alterado para `<uuid>#<iso3>#<index>` garantindo unicidade
+   - **Validação:** Países com 3-5 livros verificados no DynamoDB
+
+3. **Bug #3: deleteOldUserReadings Apagava Payloads**
+   - **Problema:** Função deletava TODOS os items do usuário, incluindo `WEBHOOK#PAYLOAD#*`
+   - **Impacto:** Payloads apareciam salvos em logs mas eram imediatamente deletados
+   - **Fix:** Adicionado filtro `if !strings.HasPrefix(pkAttr.Value, "EVENT#LEITURA")`
+   - **Validação:** Payload `WEBHOOK#PAYLOAD#73d590f5...` confirmado no DynamoDB
+
+**Melhorias de estabilidade:**
+
+4. **GPS Markers apenas para progresso ≥ 1%**
+   - Filtro adicionado: `if reading.Progresso < 1 { continue }`
+   - Evita marcadores em livros não iniciados
+
+5. **Force Rebuild em Todos os Deploys**
+   - **Problema:** SST usava builds em cache, código antigo sendo deployado
+   - **Fix:** Makefile agora deleta e recompila todos os binários Go antes do deploy
+   - Afeta: `deploy-dev` e `deploy-prod`
+
+6. **get-api-key Retornando Múltiplos Valores**
+   - **Problema:** Comando retornava várias API keys, quebrando curl
+   - **Impacto:** `make webhook-full` e `make stats` falhavam silenciosamente
+   - **Fix:** Adicionado `| head -1` para retornar apenas primeira key ativa
+
+7. **12 Correções de Mapeamento de Países**
+   - República Tcheca → Tchéquia
+   - Cingapura → Singapura
+   - Holanda → Países Baixos
+   - Tajiquistão → Tadjiquistão
+   - Timor Leste → Timor-Leste
+   - San Marino → São Marino
+   - Djibuti → Djibouti
+   - Congo-Brazzaville → Congo
+   - Seicheles → Seychelles
+   - Trinidad e Tobago → Trindade e Tobago
+   - São Vicente e Granadinas → São Vicente e Grandinas
+   - Palestina → Estado da Palestina
+
+**Novas features:**
+
+8. **Comando `make webhook-full`**
+   - Gera webhook com TODOS os 185 países (2-5 livros cada)
+   - Dados randomizados: progresso 1-100%, datas variadas
+   - Útil para popular ambiente DEV com dados realistas
+
+9. **Comando `make stats`**
+   - Fetch rápido de estatísticas da API
+   - Usa API key automaticamente
+   - Output formatado com jq
+
+10. **Campo `updatedAt` Adicionado**
+    - Salva timestamp RFC3339 do último update do livro
+    - Usado para determinar livro mais recente quando usuário lê múltiplos
+    - GPS marker aparece no país do livro com maior `updatedAt`
+
+**Arquitetura Final v1.0.3:**
+
+**Estrutura de dados DynamoDB:**
+```
+LeituraItem (eventos de leitura):
+- PK: "EVENT#LEITURA"                    ← Simples, queries funcionam
+- SK: "<uuid>#<iso3>#<index>"            ← Único por livro
+- webhookUUID: "<uuid>"                  ← Rastreamento de execução
+- updatedAt: "2025-12-25T14:30:00Z"      ← Ordenação temporal
+- iso3, pais, categoria, progresso, user, imagemURL, livro
+
+WebhookItem (payload original):
+- PK: "WEBHOOK#PAYLOAD#<uuid>"           ← Salvo UMA VEZ
+- SK: "TIMESTAMP#<RFC3339>"
+- user, payload (JSON completo)
+
+FalhaItem (erros):
+- PK: "ERROR#<uuid>"
+- SK: "TIMESTAMP#<RFC3339>"
+- errorType, errorMessage, originalPayload
+```
+
+**Rastreamento completo mantido:**
+- Webhook UUID: Agrupa todos eventos de uma execução
+- Payload salvo separadamente (não deletado)
+- Múltiplos livros por país suportados
+- Queries eficientes (`PK = "EVENT#LEITURA"`)
+- Auto-cleanup protege payloads
+
+**Breaking changes:**
+- SK mudou de `COUNTRY#<iso3>` para `<uuid>#<iso3>#<index>`
+- Campo `webhookUUID` agora obrigatório
+- Campo `updatedAt` agora obrigatório
+- Users endpoint usa `updatedAt` para ordenação (não SK)
+
+**Arquivos modificados:**
+- `types/types.go` - Campos `WebhookUUID` e `UpdatedAt` em LeituraItem
+- `webhook/main.go` - PK simples, SK único, proteção de payloads, import strings
+- `users/main.go` - Comparação por `UpdatedAt`, filtro `progresso >= 1`
+- `Makefile` - Force rebuild, get-api-key único, webhook-full, stats, 12 nomes corrigidos
+- `package.json` - Version bump 1.0.3
+
+**Testes:**
+- ✅ 26 Go unit tests passando
+- ✅ Stats retornando 174 países
+- ✅ Múltiplos livros por país confirmados (3-5 livros)
+- ✅ Payload salvo e preservado
+- ✅ GPS markers filtrados (progresso >= 1%)
+- ✅ Deploy force rebuild funcionando
+
+**Migração de dados:**
+- Dados v1.0.2 ficam órfãos mas inofensivos
+- Próximo webhook do usuário limpa dados antigos automaticamente
+- Sem necessidade de migração manual
 
 ### ✅ v1.0.2: UUID Architecture & Storage Optimization (25 Dez 2025)
 

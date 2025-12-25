@@ -77,6 +77,14 @@ vendor/
 *.out
 go.work
 
+# Go compiled binaries (Lambda functions)
+packages/functions/*/bootstrap
+packages/functions/*/clear
+packages/functions/*/seed
+packages/functions/*/stats
+packages/functions/*/users
+packages/functions/*/webhook
+
 # AWS
 .aws-sam/
 samconfig.toml

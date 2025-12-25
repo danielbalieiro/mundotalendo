@@ -96,8 +96,15 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			continue
 		}
 
-		// Keep latest reading per user (SK is timestamp-based, lexicographic comparison works)
-		if existing, exists := userLatest[reading.User]; !exists || reading.SK > existing.SK {
+		// Skip if progress is 0% (v1.0.3: GPS markers only for active readings)
+		if reading.Progresso < 1 {
+			continue
+		}
+
+		// Keep latest reading per user (v1.0.3: use UpdatedAt timestamp, not SK)
+		// SK now is <uuid>#<iso3>#<index> - doesn't reflect temporal order
+		// UpdatedAt has actual timestamp from book's last update
+		if existing, exists := userLatest[reading.User]; !exists || reading.UpdatedAt > existing.UpdatedAt {
 			userLatest[reading.User] = reading
 		}
 	}
@@ -111,7 +118,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			ISO3:      item.ISO3,
 			Pais:      item.Pais,
 			Livro:     item.Livro,
-			Timestamp: item.SK,
+			Timestamp: item.UpdatedAt, // v1.0.3: use UpdatedAt instead of SK
 		})
 	}
 
