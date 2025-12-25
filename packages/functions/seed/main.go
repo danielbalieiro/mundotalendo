@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/google/uuid"
 	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/mapping"
 	"github.com/mundotalendo/functions/types"
@@ -124,17 +125,34 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			}},
 		}
 
-		metadataBytes, _ := json.Marshal(samplePayload)
+		// Generate UUID for this seed event (simulates a webhook)
+		seedUUID := uuid.New().String()
 
+		// Save payload once (optional for seed, but maintains consistency)
+		payloadBytes, _ := json.Marshal(samplePayload)
+		webhookItem := types.WebhookItem{
+			PK:      fmt.Sprintf("WEBHOOK#PAYLOAD#%s", seedUUID),
+			SK:      fmt.Sprintf("TIMESTAMP#%s", timestamp.Format(time.RFC3339)),
+			User:    userName,
+			Payload: string(payloadBytes),
+		}
+		avWebhook, _ := attributevalue.MarshalMap(webhookItem)
+		dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+			TableName: &tableName,
+			Item:      avWebhook,
+		})
+
+		// Create reading item with UUID-based keys
 		item := types.LeituraItem{
-			PK:        "EVENT#LEITURA",
-			SK:        fmt.Sprintf("TIMESTAMP#%s", timestamp.Format(time.RFC3339)),
+			PK:        fmt.Sprintf("EVENT#LEITURA#%s", seedUUID),
+			SK:        fmt.Sprintf("COUNTRY#%s", iso3),
 			ISO3:      iso3,
 			Pais:      randomCountry,
 			Categoria: randomCategory,
 			Progresso: randomProgress,
 			User:      userName,
-			Metadata:  string(metadataBytes),
+			ImagemURL: fmt.Sprintf("https://i.pravatar.cc/150?u=%s", userName),
+			Livro:     fmt.Sprintf("Livro sobre %s", randomCountry),
 		}
 
 		av, err := attributevalue.MarshalMap(item)

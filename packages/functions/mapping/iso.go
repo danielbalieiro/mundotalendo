@@ -163,6 +163,7 @@ var NameToIso = map[string]string{
 	"País de Gales":                 "GBR",
 	"Irlanda do Norte":              "GBR",
 	"Irlanda do norte":              "GBR", // Variação de capitalização usada pelo Maratona.app
+	"irlanda do norte":              "GBR", // Variação em minúsculas
 	"República Centro-Africana":     "CAF",
 	"República Democrática do Congo": "COD",
 	"República Dominicana":          "DOM",
