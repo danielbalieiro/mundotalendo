@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats users clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
 # ⚠️ IMPORTANT: This project uses us-east-2 (Ohio) region
 # All AWS commands MUST use --region us-east-2
@@ -24,19 +24,21 @@ help: ## Show this help
 # Build
 build: ## Build all Go functions
 	@echo "$(GREEN)Building Go functions...$(NC)"
-	@cd packages/functions/types && go build .
-	@cd packages/functions/webhook && go build .
-	@cd packages/functions/stats && go build .
-	@cd packages/functions/seed && go build .
-	@cd packages/functions/clear && go build .
+	@(cd packages/functions/types && go build .)
+	@(cd packages/functions/webhook && go build .)
+	@(cd packages/functions/stats && go build .)
+	@(cd packages/functions/seed && go build .)
+	@(cd packages/functions/clear && go build .)
+	@(cd packages/functions/users && go build .)
 	@echo "$(GREEN)Build completed!$(NC)"
 
 tidy: ## Update Go dependencies
 	@echo "$(GREEN)Updating Go dependencies...$(NC)"
-	@cd packages/functions/webhook && go mod tidy
-	@cd packages/functions/stats && go mod tidy
-	@cd packages/functions/seed && go mod tidy
-	@cd packages/functions/clear && go mod tidy
+	@(cd packages/functions/webhook && go mod tidy)
+	@(cd packages/functions/stats && go mod tidy)
+	@(cd packages/functions/seed && go mod tidy)
+	@(cd packages/functions/clear && go mod tidy)
+	@(cd packages/functions/users && go mod tidy)
 	@echo "$(GREEN)Dependencies updated!$(NC)"
 
 clean: ## Clean builds and cache
@@ -46,9 +48,10 @@ clean: ## Clean builds and cache
 	@echo "$(GREEN)Cleanup completed!$(NC)"
 
 # Deploy
-unlock: ## Unlock stuck deployment
+unlock: ## Unlock stuck deployment (use STAGE=prod for production)
 	@echo "$(YELLOW)Unlocking deployment...$(NC)"
-	@npx sst unlock --stage dev
+	@STAGE=$${STAGE:-dev}; \
+	npx sst unlock --stage $$STAGE
 
 deploy-dev: ## Deploy to dev environment and fix env vars
 	@echo "$(GREEN)Deploying to DEV...$(NC)"
@@ -97,17 +100,16 @@ dev: ## Start local Next.js server
 	@echo "$(GREEN)Starting local server...$(NC)"
 	@npm run dev:local
 
-update-secret: ## Update SST Secret with current API key from DynamoDB
+update-secret: ## Update SST Secret with current API key from DynamoDB (use STAGE=prod for production)
 	@echo "$(YELLOW)Syncing SST Secret with DynamoDB API key...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
-		echo "$(RED)Error: No API key found. Creating one...$(NC)"; \
-		$(MAKE) create-api-key name=dev-test; \
-		API_KEY=$$($(MAKE) -s get-api-key); \
+		echo "$(RED)Error: No API key found for stage $$STAGE. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
 	fi; \
-	STAGE=$${STAGE:-dev}; \
 	npx sst secret set FrontendApiKey "$$API_KEY" --stage $$STAGE; \
-	echo "$(GREEN)✅ SST Secret updated with: $$API_KEY$(NC)"
+	echo "$(GREEN)✅ SST Secret updated with: $$API_KEY (stage: $$STAGE)$(NC)"
 
 update-env-local: ## Update .env.local with current API key
 	@API_KEY=$$($(MAKE) -s get-api-key); \
@@ -233,9 +235,14 @@ test-api: ## Test dev API endpoints
 	echo "  - POST $(API_DEV)/test/seed"; \
 	echo "  - POST $(API_DEV)/clear"
 
-seed: ## Populate database with random data (count=20)
+seed: ## Populate database with random data (count=20) - DEV ONLY (not supported in prod for safety)
 	@echo "$(GREEN)Populating database...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: seed command is DEV-only for safety. Use webhook-full for testing in dev.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
 		exit 1; \
@@ -245,19 +252,48 @@ seed: ## Populate database with random data (count=20)
 		-H "X-API-Key: $$API_KEY" \
 		-d '{"count": 20}' | jq .
 
-stats: ## Get reading statistics from API
+stats: ## Get reading statistics from API (use STAGE=prod for production)
 	@echo "$(GREEN)Fetching stats...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
 		exit 1; \
 	fi; \
-	curl -s $(API_DEV)/stats \
+	if [ "$$STAGE" = "prod" ]; then \
+		API_URL=$(API_PROD); \
+	else \
+		API_URL=$(API_DEV); \
+	fi; \
+	echo "$(YELLOW)Stage: $$STAGE | URL: $$API_URL$(NC)"; \
+	curl -s $$API_URL/stats \
 		-H "X-API-Key: $$API_KEY" | jq .
 
-clear: ## Clear all database tables
+users: ## Get user locations from API (use STAGE=prod for production)
+	@echo "$(GREEN)Fetching user locations...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	if [ "$$STAGE" = "prod" ]; then \
+		API_URL=$(API_PROD); \
+	else \
+		API_URL=$(API_DEV); \
+	fi; \
+	echo "$(YELLOW)Stage: $$STAGE | URL: $$API_URL$(NC)"; \
+	curl -s $$API_URL/users/locations \
+		-H "X-API-Key: $$API_KEY" | jq .
+
+clear: ## Clear all database tables - DEV ONLY (not supported in prod for safety)
 	@echo "$(RED)Clearing database...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: clear command is DEV-only for safety. NEVER clear production data.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
 		exit 1; \
@@ -265,9 +301,14 @@ clear: ## Clear all database tables
 	curl -s -X POST $(API_DEV)/clear \
 		-H "X-API-Key: $$API_KEY" | jq .
 
-webhook-test: ## Test webhook with sample payload
+webhook-test: ## Test webhook with sample payload - DEV ONLY (not supported in prod for safety)
 	@echo "$(GREEN)Testing webhook...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: webhook-test is DEV-only for safety. Real webhooks come from Maratona.app in prod.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
 		exit 1; \
@@ -287,9 +328,14 @@ webhook-test: ## Test webhook with sample payload
 			}] \
 		}' | jq .
 
-webhook-full: ## Send webhook with ALL countries (2-5 books each) in ONE request
+webhook-full: ## Send webhook with ALL countries (2-5 books each) in ONE request - DEV ONLY
 	@echo "$(GREEN)Generating full webhook payload for all countries...$(NC)"
-	@API_KEY=$$($(MAKE) -s get-api-key); \
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: webhook-full is DEV-only for safety. Real webhooks come from Maratona.app in prod.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
 	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
 		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
 		exit 1; \

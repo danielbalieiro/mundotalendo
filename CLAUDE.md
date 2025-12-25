@@ -122,13 +122,20 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
    - Gera webhook com TODOS os 185 países (2-5 livros cada)
    - Dados randomizados: progresso 1-100%, datas variadas
    - Útil para popular ambiente DEV com dados realistas
+   - **Protegido:** DEV-only, bloqueado em produção
 
-9. **Comando `make stats`**
-   - Fetch rápido de estatísticas da API
+9. **Comando `make stats`** e **`make users`**
+   - Fetch rápido de estatísticas e localizações da API
    - Usa API key automaticamente
    - Output formatado com jq
+   - **Suporta STAGE=prod:** `make stats STAGE=prod` funciona em produção
 
-10. **Campo `updatedAt` Adicionado**
+10. **Suporte STAGE em comandos Makefile**
+    - 6 comandos suportam `STAGE=prod`: stats, users, get-api-key, fix-env, update-secret, unlock
+    - 4 comandos protegidos DEV-only: seed, clear, webhook-test, webhook-full
+    - Proteção de segurança impede comandos destrutivos em produção
+
+11. **Campo `updatedAt` Adicionado**
     - Salva timestamp RFC3339 do último update do livro
     - Usado para determinar livro mais recente quando usuário lê múltiplos
     - GPS marker aparece no país do livro com maior `updatedAt`
@@ -172,7 +179,14 @@ FalhaItem (erros):
 - `types/types.go` - Campos `WebhookUUID` e `UpdatedAt` em LeituraItem
 - `webhook/main.go` - PK simples, SK único, proteção de payloads, import strings
 - `users/main.go` - Comparação por `UpdatedAt`, filtro `progresso >= 1`
-- `Makefile` - Force rebuild, get-api-key único, webhook-full, stats, 12 nomes corrigidos
+- `Makefile` - 10 fixes críticos:
+  - Suporte STAGE em 6 comandos (stats, users, get-api-key, fix-env, update-secret, unlock)
+  - Proteção DEV-only em 4 comandos (seed, clear, webhook-test, webhook-full)
+  - Novo comando `make users` para GET /users/locations
+  - Force rebuild usando subshells em build/tidy
+  - 12 nomes de países corrigidos em webhook-full
+- `.gitignore` - Regras para ignorar binários Go compilados
+- `CLAUDE.md` - Seção completa "🔧 Comandos Make e STAGE", changelog v1.0.3 atualizado
 - `package.json` - Version bump 1.0.3
 
 **Testes:**
@@ -675,33 +689,127 @@ packages/functions/
    - "Badges" por regiões completadas
    - Progresso coletivo
 
+## 🔧 Comandos Make e STAGE
+
+### Ambientes (STAGE)
+
+O projeto tem dois ambientes:
+- **dev** (padrão) - Desenvolvimento e testes
+- **prod** - Produção com dados reais
+
+### Comandos que suportam STAGE=prod
+
+Para executar comandos em produção, use `STAGE=prod`:
+
+```bash
+# DEV (padrão)
+make stats
+
+# PROD
+make stats STAGE=prod
+```
+
+**Comandos que suportam STAGE=prod:**
+- `make stats STAGE=prod` - Ver estatísticas de produção
+- `make users STAGE=prod` - Ver localizações de usuários em produção
+- `make get-api-key STAGE=prod` - Pegar API key de produção
+- `make fix-env STAGE=prod` - Fixar env vars de produção
+- `make update-secret STAGE=prod` - Atualizar SST Secret com API key de produção
+- `make unlock STAGE=prod` - Desbloquear deploy travado em produção
+
+**Comandos DEV-ONLY (bloqueados em prod por segurança):**
+- `make seed` - Popular database (apenas DEV)
+- `make clear` - Limpar database (apenas DEV)
+- `make webhook-test` - Testar webhook (apenas DEV)
+- `make webhook-full` - Gerar todos os países (apenas DEV)
+
+Se tentar usar comandos DEV-ONLY com `STAGE=prod`, você receberá erro:
+```bash
+make seed STAGE=prod
+# Error: seed command is DEV-only for safety.
+```
+
+### Referência Rápida de Comandos
+
+**Deploy e Infraestrutura:**
+```bash
+make deploy-dev          # Deploy completo para DEV
+make deploy-prod         # Deploy completo para PROD (pede confirmação)
+make unlock              # Desbloquear deploy travado (DEV)
+make unlock STAGE=prod   # Desbloquear deploy travado (PROD)
+```
+
+**Consultas e Testes:**
+```bash
+make stats               # Ver estatísticas (DEV)
+make stats STAGE=prod    # Ver estatísticas (PROD)
+make users               # Ver localizações de usuários (DEV)
+make users STAGE=prod    # Ver localizações de usuários (PROD)
+make seed                # Popular BD com dados de teste (DEV only)
+make clear               # Limpar BD (DEV only)
+make webhook-full        # Gerar webhook com todos os países (DEV only)
+```
+
+**API Keys:**
+```bash
+make get-api-key                    # Pegar API key (DEV)
+make get-api-key STAGE=prod         # Pegar API key (PROD)
+make create-api-key name=test       # Criar API key (DEV)
+make create-api-key-prod name=test  # Criar API key (PROD)
+make list-api-keys                  # Listar API keys (DEV)
+make list-api-keys-prod             # Listar API keys (PROD)
+```
+
+**Monitoring:**
+```bash
+make logs-all            # Ver logs em tempo real (DEV)
+make logs-all-prod       # Ver logs em tempo real (PROD)
+make alarms              # Ver status dos alarmes (DEV)
+make alarms-prod         # Ver status dos alarmes (PROD)
+make info                # Ver recursos AWS (DEV)
+make info-prod           # Ver recursos AWS (PROD)
+```
+
 ## 🧪 Testes
 
 ### Testar API manualmente
 
-Use os comandos do Makefile (já incluem API key):
-
+**DEV (padrão):**
 ```bash
 # Stats - ver países sendo lidos
 make stats
 
-# Seed - adicionar países aleatórios para teste
+# Users - ver localizações de usuários
+make users
+
+# Seed - adicionar países aleatórios
 make seed
 
-# Clear - limpar todos os dados (cuidado!)
+# Clear - limpar todos os dados
 make clear
 ```
 
-Ou curl direto (precisa de API key):
-
+**PROD:**
 ```bash
-# Stats
-curl https://api.dev.mundotalendo.com.br/stats \
-  -H "X-API-Key: sua-api-key-aqui"
+# Stats - ver estatísticas reais
+make stats STAGE=prod
 
-# Seed
-curl -X POST https://api.dev.mundotalendo.com.br/test/seed \
-  -H "X-API-Key: sua-api-key-aqui"
+# Users - ver localizações reais
+make users STAGE=prod
+
+# ⚠️ seed, clear, webhook-test NÃO funcionam em prod
+# (são comandos apenas para ambiente de desenvolvimento)
+```
+
+**Testar com curl direto:**
+```bash
+# DEV
+curl https://api.dev.mundotalendo.com.br/stats \
+  -H "X-API-Key: $(make get-api-key -s)"
+
+# PROD
+curl https://api.mundotalendo.com.br/stats \
+  -H "X-API-Key: $(STAGE=prod make get-api-key -s)"
 ```
 
 ### Testar frontend localmente
@@ -721,22 +829,45 @@ curl http://localhost:3000 | grep "Mundo Tá Lendo"
 
 **🔴 ATENÇÃO:** O banco de dados agora contém **dados reais de participantes**.
 
-**NÃO use** os comandos de teste (`make seed`, `make clear`) em ambiente de produção!
+### Comandos seguros para produção
 
-Para verificar dados atuais:
+✅ **Comandos de LEITURA** (seguros em produção):
 ```bash
-# Ver estatísticas reais (somente leitura)
-make stats
+# Ver estatísticas reais
+make stats STAGE=prod
 
-# Verificar número de leituras no DynamoDB
-aws dynamodb scan --table-name mundotalendo-danielbalieiro-LeiturasTable-hdkkstmu \
-  --select COUNT --region us-east-2
+# Ver localizações de usuários
+make users STAGE=prod
+
+# Ver recursos AWS
+make info-prod
+
+# Ver logs
+make logs-all-prod
 ```
 
-**Para testes locais:**
+🚫 **Comandos BLOQUEADOS** em produção (DEV-only):
+- `make seed` - Popular database (protegido)
+- `make clear` - Limpar database (protegido)
+- `make webhook-test` - Testar webhook (protegido)
+- `make webhook-full` - Gerar webhook completo (protegido)
+
+Estes comandos têm **proteção de segurança** e retornam erro se tentar usar com `STAGE=prod`.
+
+### Verificar dados DynamoDB
+
+```bash
+# Contar leituras em produção
+PROD_TABLE=$(aws dynamodb list-tables --region us-east-2 \
+  --query 'TableNames[?contains(@, `mundotalendo-prod-DataTable`)]' --output text)
+aws dynamodb scan --table-name $PROD_TABLE --select COUNT --region us-east-2
+```
+
+### Para testes locais
+
 - Use ambiente local com mock data
 - Configure `NEXT_PUBLIC_API_URL=/api` no `.env.local`
-- Ou crie table DynamoDB separada para testes
+- Ou use ambiente DEV: `make stats` (sem STAGE=prod)
 
 ## ⚠️ Avisos Importantes
 
@@ -749,7 +880,8 @@ aws dynamodb scan --table-name mundotalendo-danielbalieiro-LeiturasTable-hdkkstm
 7. **Não usar react-map-gl** - implementação direta MapLibre
 8. **Webpack, não Turbopack** - via npm run dev:local
 9. **Tailwind CSS v4** - nova sintaxe com @tailwindcss/postcss
-10. **🚫 NÃO executar** `make seed` ou `make clear` em produção - apenas em testes locais
+10. **🔒 Comandos DEV-only protegidos** - `make seed`, `make clear`, `make webhook-test`, `make webhook-full` são bloqueados em produção por segurança (não funcionam com `STAGE=prod`)
+11. **✅ Use STAGE=prod para consultas** - `make stats STAGE=prod` e `make users STAGE=prod` são seguros para consultar dados de produção
 
 ## 🔗 Links Úteis
 
