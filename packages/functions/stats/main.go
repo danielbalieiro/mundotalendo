@@ -98,12 +98,15 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	}
 
 	// Convert map to list of CountryProgress
+	// FILTER: Only include countries with progress >= 1% (exclude 0% to show as unexplored)
 	countries := make([]types.CountryProgress, 0, len(countryProgress))
 	for iso, progress := range countryProgress {
-		countries = append(countries, types.CountryProgress{
-			ISO3:     iso,
-			Progress: progress,
-		})
+		if progress >= 1 { // Changed from >= 0 to >= 1
+			countries = append(countries, types.CountryProgress{
+				ISO3:     iso,
+				Progress: progress,
+			})
+		}
 	}
 
 	// Build response

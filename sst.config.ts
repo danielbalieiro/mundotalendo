@@ -17,10 +17,18 @@ export default $config({
     // DynamoDB Single Table for all data (events, errors, API keys)
     const dataTable = new sst.aws.Dynamo("DataTable", {
       fields: {
-        PK: "string",  // Partition key: EVENT#*, ERROR#*, APIKEY#*
-        SK: "string",  // Sort key: TIMESTAMP#*, KEY#*
+        PK: "string",   // Partition key: EVENT#LEITURA#<uuid>, ERROR#<uuid>, APIKEY#*, WEBHOOK#PAYLOAD#<uuid>
+        SK: "string",   // Sort key: COUNTRY#<iso3>, TIMESTAMP#*, KEY#*
+        user: "string", // User name for GSI queries
       },
       primaryIndex: { hashKey: "PK", rangeKey: "SK" },
+      globalIndexes: {
+        UserIndex: {
+          hashKey: "user",
+          rangeKey: "PK", // Helps with efficient queries
+          projection: "all",
+        },
+      },
       transform: {
         table: {
           pointInTimeRecovery: { enabled: true },

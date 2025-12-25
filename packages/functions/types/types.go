@@ -44,27 +44,43 @@ type Vinculado struct {
 	DiaMarcado string  `json:"diaMarcado,omitempty"`
 }
 
-// DynamoDB item structure
+// DynamoDB item structures
+
+// LeituraItem - Item de leitura (país) agrupado por UUID do webhook
+// PK: "EVENT#LEITURA#<uuid>" - agrupa todos os eventos do mesmo webhook
+// SK: "COUNTRY#<iso3>" - identifica o país dentro do webhook
 type LeituraItem struct {
-	PK        string `dynamodbav:"PK"`
-	SK        string `dynamodbav:"SK"`
-	ISO3      string `dynamodbav:"iso3"`
-	Pais      string `dynamodbav:"pais"`
-	Categoria string `dynamodbav:"categoria"`
-	Progresso int    `dynamodbav:"progresso"`
-	User      string `dynamodbav:"user"`
+	PK        string `dynamodbav:"PK"`        // "EVENT#LEITURA#<uuid>"
+	SK        string `dynamodbav:"SK"`        // "COUNTRY#<iso3>"
+	ISO3      string `dynamodbav:"iso3"`      // Código ISO 3166-1 Alpha-3
+	Pais      string `dynamodbav:"pais"`      // Nome do país em português
+	Categoria string `dynamodbav:"categoria"` // Mês/categoria do desafio
+	Progresso int    `dynamodbav:"progresso"` // Progresso 0-100%
+	User      string `dynamodbav:"user"`      // Nome do usuário
 	ImagemURL string `dynamodbav:"imagemURL"` // URL do avatar do usuário
 	Livro     string `dynamodbav:"livro"`     // Título do livro sendo lido
-	Metadata  string `dynamodbav:"metadata"`
+	// Metadata REMOVIDO - payload está em WebhookItem separado!
 }
 
-// Falhas table item structure
+// WebhookItem - Item de webhook payload (salvo UMA VEZ por execução)
+// PK: "WEBHOOK#PAYLOAD#<uuid>" - identifica o webhook único
+// SK: "TIMESTAMP#<RFC3339>" - timestamp da execução
+type WebhookItem struct {
+	PK      string `dynamodbav:"PK"`      // "WEBHOOK#PAYLOAD#<uuid>"
+	SK      string `dynamodbav:"SK"`      // "TIMESTAMP#<RFC3339>"
+	User    string `dynamodbav:"user"`    // Nome do usuário
+	Payload string `dynamodbav:"payload"` // JSON completo do webhook
+}
+
+// FalhaItem - Item de erro/falha com UUID
+// PK: "ERROR#<uuid>" - identifica o erro único
+// SK: "TIMESTAMP#<RFC3339>" - timestamp do erro
 type FalhaItem struct {
-	PK              string `dynamodbav:"PK"`
-	SK              string `dynamodbav:"SK"`
-	ErrorType       string `dynamodbav:"errorType"`
-	ErrorMessage    string `dynamodbav:"errorMessage"`
-	OriginalPayload string `dynamodbav:"originalPayload"`
+	PK              string `dynamodbav:"PK"`              // "ERROR#<uuid>"
+	SK              string `dynamodbav:"SK"`              // "TIMESTAMP#<RFC3339>"
+	ErrorType       string `dynamodbav:"errorType"`       // Tipo do erro
+	ErrorMessage    string `dynamodbav:"errorMessage"`    // Mensagem do erro
+	OriginalPayload string `dynamodbav:"originalPayload"` // Payload que causou o erro
 }
 
 // Stats response structure

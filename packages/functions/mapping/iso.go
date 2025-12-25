@@ -17,6 +17,7 @@ var NameToIso = map[string]string{
 	"Austrália":                     "AUS",
 	"Áustria":                       "AUT",
 	"Azerbaijão":                    "AZE",
+	"Azerbajão":                     "AZE", // Variação de grafia usada pelo Maratona.app
 	"Bahamas":                       "BHS",
 	"Bahrein":                       "BHR",
 	"Bangladesh":                    "BGD",
@@ -35,6 +36,7 @@ var NameToIso = map[string]string{
 	"Burundi":                       "BDI",
 	"Butão":                         "BTN",
 	"Cabo Verde":                    "CPV",
+	"Cabo verde":                    "CPV", // Variação de capitalização usada pelo Maratona.app
 	"Camarões":                      "CMR",
 	"Camboja":                       "KHM",
 	"Canadá":                        "CAN",
@@ -59,6 +61,7 @@ var NameToIso = map[string]string{
 	"Egito":                         "EGY",
 	"El Salvador":                   "SLV",
 	"Emirados Árabes Unidos":        "ARE",
+	"Emirados Árabes":               "ARE", // Variação curta usada pelo Maratona.app
 	"Equador":                       "ECU",
 	"Eritreia":                      "ERI",
 	"Eslováquia":                    "SVK",
@@ -159,6 +162,7 @@ var NameToIso = map[string]string{
 	"Escócia":                       "GBR",
 	"País de Gales":                 "GBR",
 	"Irlanda do Norte":              "GBR",
+	"Irlanda do norte":              "GBR", // Variação de capitalização usada pelo Maratona.app
 	"República Centro-Africana":     "CAF",
 	"República Democrática do Congo": "COD",
 	"República Dominicana":          "DOM",
@@ -185,6 +189,7 @@ var NameToIso = map[string]string{
 	"Sudão do Sul":                  "SSD",
 	"Suécia":                        "SWE",
 	"Suíça":                         "CHE",
+	"Suiça":                         "CHE", // Variação sem acento usada pelo Maratona.app
 	"Suriname":                      "SUR",
 	"Tailândia":                     "THA",
 	"Taiwan":                        "TWN",

@@ -13,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/google/uuid"
 	"github.com/mundotalendo/functions/auth"
 	"github.com/mundotalendo/functions/mapping"
 	"github.com/mundotalendo/functions/types"
@@ -31,6 +33,91 @@ func init() {
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
 	tableName = os.Getenv("SST_Resource_DataTable_name")
+}
+
+// saveWebhookPayload salva o payload original UMA VEZ por execução de webhook
+func saveWebhookPayload(ctx context.Context, webhookUUID, user, payloadBody string, timestamp time.Time) error {
+	item := types.WebhookItem{
+		PK:      fmt.Sprintf("WEBHOOK#PAYLOAD#%s", webhookUUID),
+		SK:      fmt.Sprintf("TIMESTAMP#%s", timestamp.Format(time.RFC3339)),
+		User:    user,
+		Payload: payloadBody,
+	}
+
+	av, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return fmt.Errorf("failed to marshal webhook item: %w", err)
+	}
+
+	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &tableName,
+		Item:      av,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to save webhook payload: %w", err)
+	}
+
+	log.Printf("Saved webhook payload for user %s with UUID %s", user, webhookUUID)
+	return nil
+}
+
+// deleteOldUserReadings deleta todos os registros antigos de leitura do usuário via GSI
+func deleteOldUserReadings(ctx context.Context, user string) error {
+	// Query usando GSI UserIndex para encontrar todos os registros do usuário
+	input := &dynamodb.QueryInput{
+		TableName:              &tableName,
+		IndexName:              strPtr("UserIndex"),
+		KeyConditionExpression: strPtr("#user = :user"),
+		ExpressionAttributeNames: map[string]string{
+			"#user": "user",
+		},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":user": &ddbtypes.AttributeValueMemberS{Value: user},
+		},
+	}
+
+	result, err := dynamoClient.Query(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to query old readings: %w", err)
+	}
+
+	if len(result.Items) == 0 {
+		log.Printf("No old readings found for user %s", user)
+		return nil
+	}
+
+	// Deletar cada item encontrado
+	deletedCount := 0
+	for _, item := range result.Items {
+		pkAttr, okPK := item["PK"].(*ddbtypes.AttributeValueMemberS)
+		skAttr, okSK := item["SK"].(*ddbtypes.AttributeValueMemberS)
+
+		if !okPK || !okSK {
+			log.Printf("WARN: Invalid item structure, skipping deletion")
+			continue
+		}
+
+		_, err := dynamoClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: &tableName,
+			Key: map[string]ddbtypes.AttributeValue{
+				"PK": &ddbtypes.AttributeValueMemberS{Value: pkAttr.Value},
+				"SK": &ddbtypes.AttributeValueMemberS{Value: skAttr.Value},
+			},
+		})
+		if err != nil {
+			log.Printf("WARN: Failed to delete item %s#%s: %v", pkAttr.Value, skAttr.Value, err)
+		} else {
+			deletedCount++
+		}
+	}
+
+	log.Printf("Deleted %d old readings for user %s", deletedCount, user)
+	return nil
+}
+
+// strPtr returns a pointer to a string
+func strPtr(s string) *string {
+	return &s
 }
 
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -123,6 +210,25 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		}, nil
 	}
 
+	// Generate UUID UMA VEZ para este webhook
+	webhookUUID := uuid.New().String()
+	user := payload.Perfil.Nome
+	timestamp := time.Now()
+
+	log.Printf("Processing webhook %s for user %s", webhookUUID, user)
+
+	// Salvar payload original UMA VEZ
+	if err := saveWebhookPayload(ctx, webhookUUID, user, request.Body, timestamp); err != nil {
+		log.Printf("WARN: Failed to save webhook payload: %v", err)
+		// Não falhar o webhook por isso, apenas logar
+	}
+
+	// Deletar leituras antigas do usuário ANTES de criar novas
+	if err := deleteOldUserReadings(ctx, user); err != nil {
+		log.Printf("WARN: Failed to delete old readings for user %s: %v", user, err)
+		// Não falhar o webhook por isso, apenas logar
+	}
+
 	type ErrorDetail struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
@@ -134,7 +240,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	var errors []ErrorDetail
 
 	// Process each desafio
-	for i, desafio := range payload.Desafios {
+	for _, desafio := range payload.Desafios {
 		// Filter: only process "leitura" or "atividade" types
 		if desafio.Tipo != "leitura" && desafio.Tipo != "atividade" {
 			continue
@@ -204,37 +310,20 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			continue
 		}
 
-		// Marshal metadata (complete payload as JSON)
-		metadataBytes, err := json.Marshal(payload)
-		if err != nil {
-			log.Printf("Error marshaling metadata: %v", err)
-			saveToFalhas(ctx, "METADATA_MARSHAL_ERROR", err.Error(), request.Body)
-			errors = append(errors, ErrorDetail{
-				Code:    "METADATA_MARSHAL_ERROR",
-				Message: "Failed to serialize metadata",
-				Details: err.Error(),
-			})
-			errorCount++
-			continue
-		}
-
-		// Create DynamoDB item
-		timestamp := latestUpdate
-		if timestamp.IsZero() {
-			timestamp = time.Now()
-		}
-
+		// Create DynamoDB item with UUID-based keys
+		// UUID groups all countries from this webhook execution
+		// Payload is saved separately in WebhookItem (no duplication!)
 		item := types.LeituraItem{
-			PK:        "EVENT#LEITURA",
-			SK:        fmt.Sprintf("TIMESTAMP#%s#%d", timestamp.Format(time.RFC3339), i),
+			PK:        fmt.Sprintf("EVENT#LEITURA#%s", webhookUUID),
+			SK:        fmt.Sprintf("COUNTRY#%s", iso3),
 			ISO3:      iso3,
 			Pais:      cleanedCountryName,
 			Categoria: cleanedCategoria,
 			Progresso: maxProgress,
-			User:      payload.Perfil.Nome,
+			User:      user,
 			ImagemURL: payload.Perfil.Imagem, // Salvar avatar do usuário
 			Livro:     bookTitle,              // Título do livro sendo lido
-			Metadata:  string(metadataBytes),
+			// Metadata REMOVED - payload is saved separately in WebhookItem
 		}
 
 		// Save to DynamoDB
@@ -356,8 +445,9 @@ func saveToFalhas(ctx context.Context, errorType, errorMessage, originalPayload 
 	}
 
 	timestamp := time.Now()
+	errorUUID := uuid.New().String() // Generate UUID for error tracking
 	item := types.FalhaItem{
-		PK:              fmt.Sprintf("ERROR#%s", errorType),
+		PK:              fmt.Sprintf("ERROR#%s", errorUUID),
 		SK:              fmt.Sprintf("TIMESTAMP#%s", timestamp.Format(time.RFC3339)),
 		ErrorType:       errorType,
 		ErrorMessage:    errorMessage,
