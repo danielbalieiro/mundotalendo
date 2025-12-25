@@ -1,8 +1,9 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2025-12-23
+> **Última atualização:** 2025-12-25 (v1.0.2)
 > **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
+> **Versão Atual:** v1.0.2 - UUID Architecture & Storage Optimization
 
 ## 📋 Resumo Executivo
 
@@ -60,6 +61,38 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 - Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
+
+### ✅ v1.0.2: UUID Architecture & Storage Optimization (25 Dez 2025)
+
+**🚀 OTIMIZAÇÃO MASSIVA: 99% de redução em storage!**
+
+**Arquitetura UUID implementada:**
+- ✅ **Payload salvo UMA VEZ** por webhook (`WEBHOOK#PAYLOAD#<uuid>`)
+- ✅ **Eventos agrupados** por UUID (`EVENT#LEITURA#<uuid>`)
+- ✅ **Erros rastreáveis** com UUID (`ERROR#<uuid>`)
+- ✅ **Auto-limpeza** de dados antigos do usuário (mantém apenas última interação)
+- ✅ **GSI UserIndex** para queries eficientes por usuário
+- ✅ **Validação 100%** dos 195 países do Maratona.app (203 variações)
+- ✅ **Threshold ajustado** para ≥1% (países com 0% aparecem cinza)
+
+**Impacto esperado:**
+- Storage: 2.9 GB → 35 MB (99% de redução)
+- Writes: 195 payloads → 1 payload por webhook (99% menos writes)
+- Queries: Items menores (<1KB vs ~50KB) = mais rápidas
+- Custo: ~99% de economia em storage + write operations
+
+**Breaking changes:**
+- Novos webhooks usam `EVENT#LEITURA#<uuid>` (vs `EVENT#LEITURA` antigo)
+- Primeiro webhook após deploy limpa dados antigos automaticamente
+- `/stats` não retorna mais países com 0% de progresso
+
+**Arquivos modificados:**
+- `types/types.go` - WebhookItem struct, metadata removido
+- `webhook/main.go` - UUID functions, deleteOldUserReadings()
+- `stats/main.go` - Filtro progress >= 1
+- `mapping/iso.go` - 4 novos aliases (Azerbajão, Cabo verde, Irlanda do norte, Suíça)
+- `mapping/iso_validation_test.go` - Validação completa de países
+- `sst.config.ts` - GSI UserIndex
 
 ### ✅ NOVA FEATURE: User Markers GPS-Style (23 Dez 2025)
 

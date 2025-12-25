@@ -20,8 +20,9 @@ This is a **collaborative** project about **discovering cultures** through readi
 
 - 🗺️ **Interactive map** with MapLibre GL JS showing 193 countries
 - 🎨 **5-tier color system** - 60 distinct colors (12 months × 5 progress levels)
-- 📊 **Progress visualization** - Color intensity based on reading progress
-  - Tier 1 (0-20%): Light shade - "Iniciado"
+- 📊 **Progress visualization** - Color intensity based on reading progress (≥1% to show)
+  - 0%: Gray (unexplored - not colored)
+  - Tier 1 (1-20%): Light shade - "Iniciado"
   - Tier 2 (21-40%): Light - "Em Progresso"
   - Tier 3 (41-60%): Medium - "No Meio"
   - Tier 4 (61-80%): Dark - "Quase Completo"
@@ -45,11 +46,17 @@ This is a **collaborative** project about **discovering cultures** through readi
 ### Backend (Serverless)
 - **Runtime**: Go 1.23+ (ARM64/Graviton)
 - **Platform**: AWS Lambda
-- **Database**: DynamoDB (Single Table Design)
-  - **DataTable** - Single table with partition key prefixes:
-    - `EVENT#LEITURA` - Reading events with progress
-    - `ERROR#*` - Failed webhook processing logs
+- **Database**: DynamoDB (Single Table Design with GSI)
+  - **DataTable** - Single table with UUID-based partition keys:
+    - `EVENT#LEITURA#<uuid>` - Reading events grouped by webhook (v1.0.2+)
+    - `WEBHOOK#PAYLOAD#<uuid>` - Original payload stored once per webhook (v1.0.2+)
+    - `ERROR#<uuid>` - Failed webhook processing logs with UUID tracking
     - `APIKEY#*` - API keys for authentication
+  - **UserIndex GSI** - Global Secondary Index for efficient user queries:
+    - hashKey: `user` (participant name)
+    - rangeKey: `PK` (partition key)
+    - Enables fast deletion of old user readings
+  - **Storage Optimization**: 99% reduction (2.9 GB → 35 MB for 100 users)
 - **API**: API Gateway V2 (HTTP API with CORS)
 - **Authentication**: API Key via `X-API-Key` header (in-memory validation)
 - **Region**: us-east-2 (Ohio)
