@@ -62,6 +62,35 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 
 ## 🎯 Estado Atual do Projeto
 
+### ✅ v1.0.5: Fix CORS Proxy in Deployed Environments (03 Jan 2026)
+
+**🐛 BUGFIX CRÍTICO: Avatares não carregavam em DEV deployado**
+
+**Problema:**
+- Imagens de avatares bloqueadas por CORS em https://dev.mundotalendo.com.br
+- Erro: "Access to image at 'https://i.pravatar.cc/150?img=44' has been blocked by CORS policy"
+
+**Causa:**
+- Código usava `process.env.NODE_ENV === 'development'` para decidir usar proxy
+- Em DEV deployado, `NODE_ENV` é sempre "production" (não "development")
+- Proxy não era usado → CORS bloqueava imagens externas
+
+**Solução:**
+- ✅ Sempre usar proxy `/api/proxy-image` para URLs externas
+- ✅ Remove verificação de `NODE_ENV`
+- ✅ Proxy já tem cache de 24 horas configurado
+
+**Arquivos modificados:**
+- `src/components/Map.jsx` (linha 469): Remove condicional NODE_ENV
+- `package.json`: Version bump 1.0.5
+
+**Impacto:**
+- Fix apenas no frontend
+- Nenhuma mudança no backend
+- Compatível com v1.0.4
+
+---
+
 ### ✅ v1.0.4: User Markers - Círculos Concêntricos (03 Jan 2026)
 
 **🎨 MELHORIA VISUAL: Círculos concêntricos para marcadores GPS**
