@@ -62,6 +62,55 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 
 ## 🎯 Estado Atual do Projeto
 
+### ✅ v1.0.4: User Markers - Círculos Concêntricos (03 Jan 2026)
+
+**🎨 MELHORIA VISUAL: Círculos concêntricos para marcadores GPS**
+
+**Problema resolvido:**
+- Marcadores em linha horizontal criavam "linha bizarra cortando continentes"
+- `horizontalSpacing = 2.5` graus → com 10+ usuários = linha de 25 graus
+- Visual quebrado e confuso com múltiplos usuários no mesmo país
+
+**Solução implementada:**
+- ✅ **Círculos concêntricos** ao redor do centroid do país (360° completo)
+- ✅ **Múltiplos anéis** para escalabilidade massiva (1-1000+ usuários)
+- ✅ **Raio dinâmico limitado** - cresce até capacidade, depois adiciona anel
+- ✅ **Distribuição uniforme** em 360° (conversão polar → cartesiano)
+
+**Constantes configuráveis:**
+```javascript
+RING_BASE_RADIUS = 1.2       // graus - raio do primeiro anel
+RING_INCREMENT = 0.9          // graus - incremento entre anéis
+MIN_SPACING_DEGREES = 0.35    // graus - espaçamento mínimo entre avatares
+```
+
+**Capacidade por anel:**
+- Anel 1 (r=1.2): ~21 usuários
+- Anel 2 (r=2.1): ~38 usuários
+- Anel 3 (r=3.0): ~54 usuários
+- Anel 52 (r=47.1): suporta 1000+ usuários totais
+
+**Arquivos modificados:**
+- `src/components/Map.jsx`:
+  - Adicionadas constantes (linhas 17-19)
+  - Nova função `distributeUsersInRings()` (linhas 26-50)
+  - Lógica circular em `buildUserMarkersGeoJSON()` (linhas 97-133)
+- `CLAUDE.md` - Documentação atualizada
+
+**Impacto:**
+- **Nenhum impacto** em dados existentes (mudança apenas visual/frontend)
+- Backend `/users/locations` não muda
+- DynamoDB não é afetado
+- Compatível com v1.0.3
+
+**Testes:**
+- ✅ Compilação local bem-sucedida (`npm run dev:local`)
+- ✅ Sem erros de JavaScript
+- ✅ Página carregando corretamente
+- ⏳ Validação visual pendente (aguardando usuários reais)
+
+---
+
 ### ✅ v1.0.3: Critical Bugfixes & Stability (25 Dez 2025)
 
 **🔴 CORREÇÃO EMERGENCIAL: v1.0.2 quebrou site inteiro!**
@@ -234,12 +283,12 @@ FalhaItem (erros):
 - `mapping/iso_validation_test.go` - Validação completa de países
 - `sst.config.ts` - GSI UserIndex
 
-### ✅ NOVA FEATURE: User Markers GPS-Style (23 Dez 2025)
+### ✅ NOVA FEATURE: User Markers GPS-Style (23 Dez 2025 - Atualizado 03 Jan 2026)
 
 **Marcadores de usuários no mapa:**
 - ✅ **Avatar circular** dos usuários exibido no mapa (estilo GPS)
-- ✅ **Posicionamento inteligente** abaixo do nome do país para evitar sobreposição
-- ✅ **Offset automático** para múltiplos usuários no mesmo país (distribuição horizontal)
+- ✅ **Círculos concêntricos** ao redor do nome do país (360° completo) - **Atualizado v1.0.4**
+- ✅ **Distribuição em múltiplos anéis** para acomodar 1-1000+ usuários por país
 - ✅ **Tooltip ao hover** mostrando nome do usuário e livro sendo lido
 - ✅ **Proxy de imagens** para resolver CORS em desenvolvimento
 - ✅ **Recorte circular** das imagens usando canvas (fill completo do círculo)
@@ -251,6 +300,15 @@ FalhaItem (erros):
 - Frontend usa MapLibre sprites com ImageData (canvas → circular clip)
 - Proxy Next.js API route (`/api/proxy-image`) para bypass CORS
 - Dados salvos: `user`, `avatarURL`, `livro`, `iso3`, `pais`, `timestamp`
+
+**Algoritmo de círculos concêntricos (v1.0.4):**
+- **Anel 1:** Raio 1.2° - capacidade ~21 usuários
+- **Anel 2:** Raio 2.1° - capacidade ~38 usuários
+- **Anéis subsequentes:** Incremento de 0.9° entre anéis
+- **Capacidade dinâmica:** Calculada como `(2π * raio) / MIN_SPACING_DEGREES`
+- **Escalabilidade:** Suporta 1000+ usuários (~52 anéis concêntricos)
+- **Distribuição:** Usuários posicionados uniformemente em 360° ao redor do centroid
+- **Coordenadas:** Conversão polar → cartesiano: `offsetLng = r * cos(θ)`, `offsetLat = r * sin(θ)`
 
 ### ✅ PRODUÇÃO-READY (21 Dez 2025)
 

@@ -13,6 +13,42 @@ import { logger } from '@/utils/logger'
 // Feature flag for user markers
 const SHOW_USER_MARKERS = process.env.NEXT_PUBLIC_SHOW_USER_MARKERS === 'true'
 
+// Configuration for concentric rings around country centroids
+const RING_BASE_RADIUS = 1.2       // degrees - first ring radius
+const RING_INCREMENT = 0.9          // degrees - increment between rings
+const MIN_SPACING_DEGREES = 0.35    // degrees - minimum spacing between user avatars
+
+/**
+ * Distribute users into concentric rings around a country centroid
+ * @param {Array} users - Array of user objects to distribute
+ * @returns {Array} Array of ring objects {radius, users, count}
+ */
+function distributeUsersInRings(users) {
+  const rings = []
+  let remainingUsers = users.length
+  let ringIndex = 0
+  let userOffset = 0
+
+  while (remainingUsers > 0) {
+    const radius = RING_BASE_RADIUS + (ringIndex * RING_INCREMENT)
+    const circumference = 2 * Math.PI * radius
+    const ringCapacity = Math.floor(circumference / MIN_SPACING_DEGREES)
+    const usersInRing = Math.min(remainingUsers, ringCapacity)
+
+    rings.push({
+      radius: radius,
+      users: users.slice(userOffset, userOffset + usersInRing),
+      count: usersInRing
+    })
+
+    userOffset += usersInRing
+    remainingUsers -= usersInRing
+    ringIndex++
+  }
+
+  return rings
+}
+
 /**
  * Build GeoJSON FeatureCollection with country centroids and Portuguese names
  * @returns {Object} GeoJSON FeatureCollection
@@ -53,36 +89,45 @@ export function buildUserMarkersGeoJSON(users, centroids) {
     usersByCountry[user.iso3].push(user)
   })
 
-  // Create features with offset if necessary
+  // Create features with concentric ring positioning
   const features = []
   Object.entries(usersByCountry).forEach(([iso, countryUsers]) => {
     const baseCoords = centroids[iso]
 
-    countryUsers.forEach((user, index) => {
-      // Place markers BELOW country label (south of centroid)
-      // Multiple users spread horizontally
-      const totalUsers = countryUsers.length
-      const horizontalSpacing = 2.5 // degrees between users
-      const horizontalOffset = totalUsers === 1
-        ? 0
-        : (index - (totalUsers - 1) / 2) * horizontalSpacing
+    // Distribute users into concentric rings
+    const rings = distributeUsersInRings(countryUsers)
 
-      const offsetLng = horizontalOffset
-      const offsetLat = -0.875 // Always below (negative = south)
+    // Log ring distribution in development
+    if (process.env.NODE_ENV === 'development' && rings.length > 1) {
+      logger.debug(`${iso}: ${countryUsers.length} users in ${rings.length} rings`)
+    }
 
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [baseCoords[0] + offsetLng, baseCoords[1] + offsetLat],
-        },
-        properties: {
-          user: user.user,
-          avatarURL: user.avatarURL,
-          country: user.pais,
-          book: user.livro || user.pais, // Fallback to country if no book
-          timestamp: user.timestamp,
-        },
+    // Process each ring
+    rings.forEach((ring, ringIndex) => {
+      const angleStep = (2 * Math.PI) / ring.count
+
+      ring.users.forEach((user, indexInRing) => {
+        // Calculate angle for this user in the ring (360° distribution)
+        const angle = indexInRing * angleStep
+
+        // Convert polar coordinates to cartesian (lng/lat offsets)
+        const offsetLng = ring.radius * Math.cos(angle)
+        const offsetLat = ring.radius * Math.sin(angle)
+
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [baseCoords[0] + offsetLng, baseCoords[1] + offsetLat],
+          },
+          properties: {
+            user: user.user,
+            avatarURL: user.avatarURL,
+            country: user.pais,
+            book: user.livro || user.pais, // Fallback to country if no book
+            timestamp: user.timestamp,
+          },
+        })
       })
     })
   })

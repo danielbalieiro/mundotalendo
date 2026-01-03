@@ -370,6 +370,53 @@ webhook-full: ## Send webhook with ALL countries (2-5 books each) in ONE request
 	echo "$$RESPONSE" | jq .; \
 	echo "\n$(GREEN)✅ Webhook sent! Check stats with: make stats$(NC)"
 
+webhook-multi-users: ## Send webhooks from MULTIPLE users - DEV ONLY (count=1000 default, for testing concentric rings)
+	@echo "$(GREEN)Generating webhooks from multiple users...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: webhook-multi-users is DEV-only for testing. Real webhooks come from Maratona.app in prod.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	COUNT=$${count:-1000}; \
+	COUNTRIES="Brasil|Portugal|Espanha|França|Itália|Alemanha|Reino Unido|Estados Unidos|Canadá|Japão"; \
+	MESES="Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro"; \
+	IFS='|' read -ra COUNTRY_ARRAY <<< "$$COUNTRIES"; \
+	IFS='|' read -ra MESES_ARRAY <<< "$$MESES"; \
+	echo "$(YELLOW)Sending webhooks for $$COUNT users...$(NC)"; \
+	echo "$(YELLOW)Progress: $(NC)"; \
+	for ((i=1; i<=COUNT; i++)); do \
+		USER="User$$(printf '%04d' $$i)"; \
+		AVATAR_ID=$$((i % 70 + 1)); \
+		AVATAR="https://i.pravatar.cc/150?img=$$AVATAR_ID"; \
+		NUM_COUNTRIES=$$((RANDOM % 2 + 1)); \
+		DESAFIOS=""; \
+		for ((j=0; j<NUM_COUNTRIES; j++)); do \
+			COUNTRY="$${COUNTRY_ARRAY[$$((RANDOM % 10))]}"; \
+			MES="$${MESES_ARRAY[$$((RANDOM % 12))]}"; \
+			PROGRESSO=$$((RANDOM % 100 + 1)); \
+			DAYS_AGO=$$((RANDOM % 30)); \
+			DATE=$$(date -u -v-$${DAYS_AGO}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "$$DAYS_AGO days ago" +"%Y-%m-%dT%H:%M:%SZ"); \
+			TITULO="Livro de $$COUNTRY por $$USER"; \
+			if [ -n "$$DESAFIOS" ]; then DESAFIOS="$$DESAFIOS,"; fi; \
+			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\"}}]}"; \
+		done; \
+		PAYLOAD="{\"perfil\":{\"nome\":\"$$USER\",\"link\":\"https://maratona.app/$$USER\",\"imagem\":\"$$AVATAR\"},\"maratona\":{\"nome\":\"Mundo Tá Lendo 2026\",\"identificador\":\"maratona-lendo-paises\"},\"desafios\":[$$DESAFIOS]}"; \
+		curl -s -X POST $(API_DEV)/webhook \
+			-H "Content-Type: application/json" \
+			-H "X-API-Key: $$API_KEY" \
+			-d "$$PAYLOAD" > /dev/null; \
+		if [ $$((i % 100)) -eq 0 ]; then \
+			echo "  $(CYAN)$$i/$$COUNT users sent...$(NC)"; \
+		fi; \
+	done; \
+	echo "\n$(GREEN)✅ Sent $$COUNT webhooks! Check stats with: make stats$(NC)"; \
+	echo "$(GREEN)✅ Check user locations with: make users$(NC)"
+
 # Logs
 logs-webhook: ## Show webhook Lambda logs
 	@echo "$(GREEN)Webhook logs (last 5min):$(NC)"
