@@ -465,10 +465,8 @@ export default function Map() {
       img.onerror = () => {
         logger.warn(`Failed to load avatar for ${user.user}: ${user.avatarURL}`)
       }
-      // Use proxy in development to bypass CORS, direct URL in production
-      const imageUrl = process.env.NODE_ENV === 'development'
-        ? `/api/proxy-image?url=${encodeURIComponent(user.avatarURL)}`
-        : user.avatarURL
+      // Always use proxy to bypass CORS for external images
+      const imageUrl = `/api/proxy-image?url=${encodeURIComponent(user.avatarURL)}`
       img.src = imageUrl
     })
   }, [users])
