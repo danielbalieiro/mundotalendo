@@ -1,9 +1,9 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2025-12-25 (v1.0.3)
+> **Última atualização:** 2026-01-05 (v1.0.6)
 > **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
-> **Versão Atual:** v1.0.3 - Critical Bugfixes & Stability
+> **Versão Atual:** v1.0.6 - Country Popup & Book Covers
 
 ## 📋 Resumo Executivo
 
@@ -61,6 +61,77 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 - Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
+
+### ✅ v1.0.6: Country Popup & Book Covers (05 Jan 2026)
+
+**🎨 NOVA FEATURE: Popup interativo de leitores por país + Capas de livros**
+
+**Features implementadas:**
+
+1. **Country Popup (Click no país)**
+   - Popup elegante com gradiente azul-roxo ao clicar em países
+   - Posicionamento dinâmico próximo ao click
+   - Header vibrante com nome do país (quebra automática de linha)
+   - Lista scrollável de leitores (max 384px altura)
+   - Footer com contador de leitores
+   - Fechamento via click fora, botão X ou tecla ESC
+
+2. **Book Covers (Capas de livros)**
+   - Campo `CapaURL` adicionado em `LeituraItem` e `UserLocation`
+   - Webhook extrai automaticamente de `vinculados[].edicao.capa`
+   - Exibição de capas reais (300x450px) no popup
+   - Placeholder com ícone de livro quando capa indisponível
+   - Fallback graceful com `onError` handler
+
+3. **Data Migration (Lambda de migração)**
+   - Nova Lambda `/migrate` para popular capas em dados antigos
+   - Busca payload original do webhook por `webhookUUID`
+   - Extrai capa do JSON salvo usando `utils.CleanEmojis`
+   - Comando `make migrate` (suporta DEV e PROD)
+   - Idempotente e seguro para múltiplas execuções
+
+4. **Test Data Enhancement**
+   - `make webhook-full` inclui capas fake (picsum.photos)
+   - `make webhook-multi-users` inclui capas fake
+   - URLs únicas por país/usuário para testes visuais
+
+**Arquivos modificados:**
+
+*Backend:*
+- `packages/functions/types/types.go` - Campo `CapaURL` em structs
+- `packages/functions/webhook/main.go` - Extração e salvamento de `capaURL`
+- `packages/functions/users/main.go` - Retorno de `capaURL` na resposta
+- `packages/functions/migrate/main.go` - Nova Lambda de migração (268 linhas)
+- `packages/functions/migrate/go.mod` - Módulo Go da migração
+- `sst.config.ts` - Rota POST /migrate (timeout 5min, 1024MB)
+
+*Frontend:*
+- `src/components/CountryPopup.jsx` - Novo componente (118 linhas)
+- `src/components/Map.jsx` - Click handler, state, integração do popup
+
+*Configuração:*
+- `Makefile` - Comando `make migrate` + capas fake em webhook-full/multi-users
+- `package.json` - Version bump 1.0.6
+
+**Compatibilidade:**
+- ✅ **Backward compatible** - campo `CapaURL` opcional
+- ✅ **Dados antigos** - migração disponível via `make migrate`
+- ✅ **Dados novos** - webhook salva capas automaticamente
+- ✅ **Nenhuma breaking change** nos endpoints existentes
+
+**Testes:**
+- ✅ 26 Go unit tests passando
+- ✅ Build Next.js sem erros
+- ✅ Migração testada (1/1 item migrado com sucesso)
+- ✅ 681 leituras em DEV, todas com `capaURL`
+
+**Impacto:**
+- Nenhum impacto em dados existentes (campo opcional)
+- Backend salva capas automaticamente em novos webhooks
+- Frontend exibe capas se disponíveis, placeholder se não
+- Migração necessária apenas para dados antigos (opcional)
+
+---
 
 ### ✅ v1.0.5: Fix CORS Proxy in Deployed Environments (03 Jan 2026)
 

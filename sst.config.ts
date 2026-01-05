@@ -117,6 +117,20 @@ export default $config({
       },
     });
 
+    api.route("POST /migrate", {
+      handler: "packages/functions/migrate",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable],
+      timeout: "300 seconds", // 5 minutes for large migrations
+      memory: "1024 MB", // More memory for scanning large tables
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 1; // Only one migration at a time
+        },
+      },
+    });
+
     api.route("GET /users/locations", {
       handler: "packages/functions/users",
       runtime: "go",

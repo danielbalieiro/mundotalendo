@@ -9,6 +9,7 @@ import { getCountryName, countryNames } from '@/config/countries'
 import { countryCentroids } from '@/config/countryCentroids'
 import { getCountryProgressColor, getTierLabel } from '@/utils/colorTiers'
 import { logger } from '@/utils/logger'
+import CountryPopup from './CountryPopup'
 
 // Feature flag for user markers
 const SHOW_USER_MARKERS = process.env.NEXT_PUBLIC_SHOW_USER_MARKERS === 'true'
@@ -148,6 +149,7 @@ export default function Map() {
   const [hoveredCountry, setHoveredCountry] = useState(null)
   const [hoveredUser, setHoveredUser] = useState(null)
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 })
+  const [popup, setPopup] = useState(null) // { iso3, countryName, position: {x, y}, readers }
 
   const { countries, total, isLoading, error } = useStats()
   const { users } = useUserLocations()
@@ -184,6 +186,37 @@ export default function Map() {
     map.current.setPaintProperty('country-fills', 'fill-color', colorExpression)
     map.current.setPaintProperty('country-fills', 'fill-opacity', 0.9) // Solid opacity for all
   }, [countries]) // Re-create function when countries changes
+
+  // Handle country click to show popup with readers
+  const handleCountryClick = useCallback((e) => {
+    if (!map.current || !users) return
+
+    const features = map.current.queryRenderedFeatures(e.point, {
+      layers: ['country-fills']
+    })
+
+    if (features.length > 0) {
+      const iso3 = features[0].properties.ADM0_A3
+      const countryName = getCountryName(iso3) || features[0].properties.name || iso3
+
+      // Filter readers for this country
+      const readers = users.filter(user => user.iso3 === iso3)
+
+      if (readers.length > 0) {
+        setPopup({
+          iso3,
+          countryName,
+          position: { x: e.point.x, y: e.point.y },
+          readers
+        })
+      }
+    }
+  }, [users])
+
+  // Close popup
+  const handleClosePopup = useCallback(() => {
+    setPopup(null)
+  }, [])
 
   // Initialize map
   useEffect(() => {
@@ -389,13 +422,17 @@ export default function Map() {
       })
     }
 
+    // Click handler for countries to show popup with readers
+    map.current.on('click', 'country-fills', handleCountryClick)
+
     return () => {
       if (map.current) {
+        map.current.off('click', 'country-fills', handleCountryClick)
         map.current.remove()
         map.current = null
       }
     }
-  }, [])
+  }, [handleCountryClick])
 
   // Update colors when countries change
   useEffect(() => {
@@ -522,6 +559,16 @@ export default function Map() {
             Lendo: {hoveredUser.book}
           </div>
         </div>
+      )}
+
+      {/* Country Popup - Readers List */}
+      {popup && (
+        <CountryPopup
+          readers={popup.readers}
+          countryName={popup.countryName}
+          position={popup.position}
+          onClose={handleClosePopup}
+        />
       )}
 
       {/* Error Message */}

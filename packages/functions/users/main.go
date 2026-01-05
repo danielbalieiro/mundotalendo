@@ -115,6 +115,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		users = append(users, types.UserLocation{
 			User:      userName,
 			AvatarURL: item.ImagemURL,
+			CapaURL:   item.CapaURL,
 			ISO3:      item.ISO3,
 			Pais:      item.Pais,
 			Livro:     item.Livro,

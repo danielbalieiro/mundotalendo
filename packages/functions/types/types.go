@@ -58,6 +58,7 @@ type LeituraItem struct {
 	Progresso int    `dynamodbav:"progresso"` // Progresso 0-100%
 	User      string `dynamodbav:"user"`      // Nome do usuário
 	ImagemURL string `dynamodbav:"imagemURL"` // URL do avatar do usuário
+	CapaURL   string `dynamodbav:"capaURL"`   // URL da capa do livro
 	Livro     string `dynamodbav:"livro"`     // Título do livro sendo lido
 
 	// v1.0.3: UUID separado para rastreamento + timestamp de update
@@ -101,6 +102,7 @@ type StatsResponse struct {
 type UserLocation struct {
 	User      string `json:"user"`
 	AvatarURL string `json:"avatarURL"`
+	CapaURL   string `json:"capaURL"`
 	ISO3      string `json:"iso3"`
 	Pais      string `json:"pais"`
 	Livro     string `json:"livro"`

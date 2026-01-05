@@ -301,6 +301,21 @@ clear: ## Clear all database tables - DEV ONLY (not supported in prod for safety
 	curl -s -X POST $(API_DEV)/clear \
 		-H "X-API-Key: $$API_KEY" | jq .
 
+migrate: ## Migrate existing data to populate book covers (capaURL) - supports STAGE=prod
+	@echo "$(YELLOW)Running migration to populate book covers...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	API_URL=$$(if [ "$$STAGE" = "prod" ]; then echo "$(API_PROD)"; else echo "$(API_DEV)"; fi); \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(YELLOW)Stage: $$STAGE$(NC)"; \
+	echo "$(YELLOW)API URL: $$API_URL$(NC)"; \
+	echo "$(YELLOW)This may take a few minutes for large datasets...$(NC)"; \
+	curl -s -X POST $$API_URL/migrate \
+		-H "X-API-Key: $$API_KEY" | jq .
+
 webhook-test: ## Test webhook with sample payload - DEV ONLY (not supported in prod for safety)
 	@echo "$(GREEN)Testing webhook...$(NC)"
 	@STAGE=$${STAGE:-dev}; \
@@ -357,8 +372,9 @@ webhook-full: ## Send webhook with ALL countries (2-5 books each) in ONE request
 			DAYS_AGO=$$((RANDOM % 365)); \
 			DATE=$$(date -u -v-$${DAYS_AGO}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "$$DAYS_AGO days ago" +"%Y-%m-%dT%H:%M:%SZ"); \
 			TITULO="Livro $$((j + 1)) de $$COUNTRY"; \
+			CAPA="https://picsum.photos/seed/$$COUNTRY-$$j/300/450"; \
 			if [ -n "$$DESAFIOS" ]; then DESAFIOS="$$DESAFIOS,"; fi; \
-			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\"}}]}"; \
+			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\",\"capa\":\"$$CAPA\"}}]}"; \
 		done; \
 	done; \
 	PAYLOAD="{\"perfil\":{\"nome\":\"Test User\",\"link\":\"https://maratona.app\",\"imagem\":\"$$AVATAR\"},\"maratona\":{\"nome\":\"Mundo Tá Lendo 2026\",\"identificador\":\"maratona-lendo-paises\"},\"desafios\":[$$DESAFIOS]}"; \
@@ -402,8 +418,9 @@ webhook-multi-users: ## Send webhooks from MULTIPLE users - DEV ONLY (count=1000
 			DAYS_AGO=$$((RANDOM % 30)); \
 			DATE=$$(date -u -v-$${DAYS_AGO}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "$$DAYS_AGO days ago" +"%Y-%m-%dT%H:%M:%SZ"); \
 			TITULO="Livro de $$COUNTRY por $$USER"; \
+			CAPA="https://picsum.photos/seed/$$USER-$$COUNTRY-$$j/300/450"; \
 			if [ -n "$$DESAFIOS" ]; then DESAFIOS="$$DESAFIOS,"; fi; \
-			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\"}}]}"; \
+			DESAFIOS="$$DESAFIOS{\"descricao\":\"$$COUNTRY\",\"categoria\":\"$$MES\",\"concluido\":true,\"tipo\":\"leitura\",\"vinculados\":[{\"progresso\":$$PROGRESSO,\"updatedAt\":\"$$DATE\",\"completo\":true,\"edicao\":{\"titulo\":\"$$TITULO\",\"capa\":\"$$CAPA\"}}]}"; \
 		done; \
 		PAYLOAD="{\"perfil\":{\"nome\":\"$$USER\",\"link\":\"https://maratona.app/$$USER\",\"imagem\":\"$$AVATAR\"},\"maratona\":{\"nome\":\"Mundo Tá Lendo 2026\",\"identificador\":\"maratona-lendo-paises\"},\"desafios\":[$$DESAFIOS]}"; \
 		curl -s -X POST $(API_DEV)/webhook \

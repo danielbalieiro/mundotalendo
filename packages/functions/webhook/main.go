@@ -256,6 +256,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		maxProgress := 0
 		var latestUpdate time.Time
 		bookTitle := ""
+		capaURL := ""
 		for _, vinculado := range desafio.Vinculados {
 			if vinculado.Progresso > maxProgress {
 				maxProgress = vinculado.Progresso
@@ -263,6 +264,10 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			// Extract book title from most recent vinculado
 			if vinculado.Edicao != nil && vinculado.Edicao.Titulo != "" {
 				bookTitle = vinculado.Edicao.Titulo
+			}
+			// Extract book cover URL from most recent vinculado
+			if vinculado.Edicao != nil && vinculado.Edicao.Capa != "" {
+				capaURL = vinculado.Edicao.Capa
 			}
 			// Parse UpdatedAt string to time.Time
 			if vinculado.UpdatedAt != "" {
@@ -329,6 +334,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			Progresso:   maxProgress,
 			User:        user,
 			ImagemURL:   payload.Perfil.Imagem,
+			CapaURL:     capaURL,
 			Livro:       bookTitle,
 			WebhookUUID: webhookUUID,                       // UUID separado para rastreamento
 			UpdatedAt:   latestUpdate.Format(time.RFC3339), // Timestamp do último update
