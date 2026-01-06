@@ -98,10 +98,11 @@ export default function CountryPopup({ readers = [], countryName, position, load
                   <div className="flex-shrink-0 w-16 h-24 bg-gray-100 rounded overflow-hidden relative">
                     {reader.capaURL ? (
                       <img
-                        src={reader.capaURL}
+                        src={`/api/proxy-image?url=${encodeURIComponent(reader.capaURL)}`}
                         alt={reader.livro}
                         className="w-full h-full object-cover"
                         onError={(e) => {
+                          e.target.onerror = null
                           e.target.style.display = 'none'
                           e.target.nextSibling.style.display = 'flex'
                         }}
