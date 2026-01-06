@@ -286,6 +286,27 @@ users: ## Get user locations from API (use STAGE=prod for production)
 	curl -s $$API_URL/users/locations \
 		-H "X-API-Key: $$API_KEY" | jq .
 
+readings: ## Get readings for a country (use STAGE=prod for production, iso3=BRA required)
+	@if [ -z "$(iso3)" ]; then \
+		echo "$(RED)Error: iso3 parameter required. Usage: make readings iso3=BRA$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Fetching readings for $(iso3)...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	if [ "$$STAGE" = "prod" ]; then \
+		API_URL=$(API_PROD); \
+	else \
+		API_URL=$(API_DEV); \
+	fi; \
+	echo "$(YELLOW)Stage: $$STAGE | URL: $$API_URL$(NC)"; \
+	curl -s $$API_URL/readings/$(iso3) \
+		-H "X-API-Key: $$API_KEY" | jq .
+
 clear: ## Clear all database tables - DEV ONLY (not supported in prod for safety)
 	@echo "$(RED)Clearing database...$(NC)"
 	@STAGE=$${STAGE:-dev}; \

@@ -145,6 +145,20 @@ export default $config({
       },
     });
 
+    api.route("GET /readings/{iso3}", {
+      handler: "packages/functions/readings",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable],
+      timeout: "30 seconds",
+      memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 10;
+        },
+      },
+    });
+
     // Next.js Frontend
     const web = new sst.aws.Nextjs("Web", {
       path: "./",

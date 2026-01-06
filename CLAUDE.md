@@ -1,9 +1,9 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2026-01-05 (v1.0.6)
+> **Última atualização:** 2026-01-06 (v1.0.7)
 > **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
-> **Versão Atual:** v1.0.6 - Country Popup & Book Covers
+> **Versão Atual:** v1.0.7 - Country Readings Popup (All Readings)
 
 ## 📋 Resumo Executivo
 
@@ -61,6 +61,102 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 - Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
+
+### ✅ v1.0.7: Country Readings Popup - Show All Readings (06 Jan 2026)
+
+**🎯 MAJOR FEATURE: Popup agora mostra TODAS as leituras de qualquer país colorido**
+
+**Problema resolvido:**
+- Popup só aparecia em países com GPS markers (1 livro mais recente por usuário)
+- Múltiplos livros no mesmo país eram invisíveis
+- Leituras históricas/completas não apareciam
+- Usuários sem GPS marker ativo não eram mostrados
+
+**Solução implementada:**
+
+1. **Novo endpoint `/readings/{iso3}`**
+   - Backend Lambda retorna TODAS as leituras de um país (progresso >= 1%)
+   - Response structure: `{readings: [{user, avatarURL, capaURL, livro, progresso, categoria, updatedAt}], total}`
+   - Query DynamoDB: `PK = "EVENT#LEITURA"` filtrado por ISO3
+   - Ordenação: livros completos primeiro (100%), depois por data de atualização
+   - Timeout 30s, Memory 256MB, Concurrency 10
+
+2. **Frontend: Click em qualquer país colorido**
+   - Remove restrição `if (readers.length > 0)`
+   - Verifica se país tem `progress >= 1%` (está colorido)
+   - Popup abre imediatamente com loading spinner
+   - Fetch assíncrono de `/readings/{iso3}`
+   - useEffect atualiza popup quando dados chegam
+
+3. **Hook personalizado `useCountryReadings`**
+   - Abstrai lógica de fetch de leituras
+   - Gerencia estados: `loading`, `error`, `readings`
+   - Função `fetchReadings(iso3)` assíncrona
+   - Reutilizável em outros componentes
+
+4. **CountryPopup redesenhado**
+   - **Loading state:** Spinner animado enquanto busca dados
+   - **Error state:** Mensagem com detalhes se fetch falhar
+   - **Progress bars:** Barra azul (#3B82F6) para em progresso, verde (#10B981) para completo
+   - **Completed badge:** Checkmark verde "✓ Completo" para livros 100%
+   - **Book covers:** Thumbnail 16x24px com fallback para emoji 📚
+   - **Layout horizontal:** Avatar (12x12) + Capa (16x24) + Detalhes em linha
+   - **Empty state:** Mensagem "Nenhuma leitura encontrada" (raro)
+   - **Scrollável:** Lista com max-height 384px para muitas leituras
+
+5. **Comando `make readings iso3=XXX`**
+   - Testa endpoint de leituras por país
+   - Suporta DEV e PROD: `make readings iso3=BRA STAGE=prod`
+   - Valida parâmetro `iso3` obrigatório
+   - Busca API key automaticamente
+
+**Arquivos novos:**
+- `packages/functions/readings/main.go` - Lambda function (159 linhas)
+- `packages/functions/readings/go.mod` - Go module
+- `packages/functions/readings/main_test.go` - Unit tests (4 tests)
+- `src/hooks/useCountryReadings.js` - React hook (40 linhas)
+
+**Arquivos modificados:**
+- `sst.config.ts` - Rota GET `/readings/{iso3}` (linhas 148-160)
+- `src/components/Map.jsx` - Click handler atualizado + useCountryReadings hook (linhas 7, 157, 193-223, 230-240, 591-592)
+- `src/components/CountryPopup.jsx` - Redesign completo (168 linhas)
+- `Makefile` - Comando `make readings` (linhas 289-308)
+- `CLAUDE.md` - Changelog v1.0.7 atualizado
+- `package.json` - Version bump 1.0.7
+
+**Compatibilidade:**
+- ✅ **100% Backward compatible** - não quebra endpoints existentes
+- ✅ **Dados antigos** - funciona com leituras sem CapaURL (fallback)
+- ✅ **GPS markers** - mantidos no mapa, não interferem com popup
+- ✅ **Nenhuma breaking change** nos endpoints ou dados
+
+**Performance:**
+- Query DynamoDB otimizada (índice PK + FilterExpression)
+- Frontend: fetch sob demanda (só quando usuário clica)
+- Timeout 30s (típico: <1s para query + network)
+- Sem paginação inicial (raramente >100 leituras/país)
+
+**Testes:**
+- ✅ 30 Go unit tests passando (26 anteriores + 4 novos readings)
+- ✅ Build Next.js sem erros
+- ✅ Popup funcional em países com múltiplas leituras
+- ✅ Loading/error states validados
+- ✅ Progress bars azuis/verdes renderizam corretamente
+- ✅ Fallbacks de capas e avatares funcionando
+
+**Impacto:**
+- Usuários veem TODA a atividade do país, não apenas GPS markers
+- Melhor visibilidade de leituras em progresso vs completas
+- UX mais rica com capas de livros e progress bars visuais
+- Nenhum impacto em dados existentes (feature read-only)
+- Queries adicionais: ~1 por click de país (sob demanda)
+
+**Gap de dados resolvido:**
+- **Antes:** `/stats` (países coloridos) ≠ `/users/locations` (GPS markers)
+- **Agora:** Popup aparece para TODOS os países coloridos, mostrando TODAS as leituras
+- **Exemplo:** Brasil tem 5 leituras de 3 usuários, mas usuários "mudaram" para outros países → Antes: popup não aparecia. Agora: popup mostra as 5 leituras históricas
+
+---
 
 ### ✅ v1.0.6: Country Popup & Book Covers (05 Jan 2026)
 

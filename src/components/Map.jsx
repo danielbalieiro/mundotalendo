@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import maplibregl from 'maplibre-gl'
 import { useStats } from '@/hooks/useStats'
 import { useUserLocations } from '@/hooks/useUserLocations'
+import useCountryReadings from '@/hooks/useCountryReadings'
 import { getMonthByCountry, months } from '@/config/months'
 import { getCountryName, countryNames } from '@/config/countries'
 import { countryCentroids } from '@/config/countryCentroids'
@@ -153,6 +154,7 @@ export default function Map() {
 
   const { countries, total, isLoading, error } = useStats()
   const { users } = useUserLocations()
+  const { fetchReadings, readings, loading: readingsLoading, error: readingsError } = useCountryReadings()
 
   // Function to apply country colors to the map (memoized with useCallback)
   const applyCountryColors = useCallback(() => {
@@ -188,8 +190,8 @@ export default function Map() {
   }, [countries]) // Re-create function when countries changes
 
   // Handle country click to show popup with readers
-  const handleCountryClick = useCallback((e) => {
-    if (!map.current || !users) return
+  const handleCountryClick = useCallback(async (e) => {
+    if (!map.current) return
 
     const features = map.current.queryRenderedFeatures(e.point, {
       layers: ['country-fills']
@@ -199,24 +201,46 @@ export default function Map() {
       const iso3 = features[0].properties.ADM0_A3
       const countryName = getCountryName(iso3) || features[0].properties.name || iso3
 
-      // Filter readers for this country
-      const readers = users.filter(user => user.iso3 === iso3)
+      // Check if country is colored (has stats data with progress >= 1%)
+      const countryStats = countries.find(c => c.iso3 === iso3)
 
-      if (readers.length > 0) {
+      // Only show popup if country is being read (progress >= 1%)
+      if (countryStats && countryStats.progress >= 1) {
+        // Set popup immediately with loading state
         setPopup({
           iso3,
           countryName,
           position: { x: e.point.x, y: e.point.y },
-          readers
+          readers: [],
+          loading: true,
+          error: null
         })
+
+        // Fetch readings data asynchronously
+        await fetchReadings(iso3)
       }
     }
-  }, [users])
+  }, [countries, fetchReadings])
 
   // Close popup
   const handleClosePopup = useCallback(() => {
     setPopup(null)
   }, [])
+
+  // Update popup when readings data arrives
+  useEffect(() => {
+    if (!readingsLoading) {
+      setPopup(prev => {
+        if (!prev || prev.loading === false) return prev
+        return {
+          ...prev,
+          readers: readings,
+          loading: false,
+          error: readingsError
+        }
+      })
+    }
+  }, [readings, readingsLoading, readingsError])
 
   // Initialize map
   useEffect(() => {
@@ -567,6 +591,8 @@ export default function Map() {
           readers={popup.readers}
           countryName={popup.countryName}
           position={popup.position}
+          loading={popup.loading || false}
+          error={popup.error || null}
           onClose={handleClosePopup}
         />
       )}
