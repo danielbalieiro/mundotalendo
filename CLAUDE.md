@@ -1,9 +1,9 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Última atualização:** 2026-01-06 (v1.0.7)
+> **Última atualização:** 2026-01-06 (v1.0.8)
 > **Status:** 🔴 EM PRODUÇÃO COM DADOS REAIS - Sistema ativo recebendo leituras reais dos participantes
 > **Deploy DEV:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
-> **Versão Atual:** v1.0.7 - Country Readings Popup (All Readings)
+> **Versão Atual:** v1.0.8 - Map Loading Race Conditions Fix
 
 ## 📋 Resumo Executivo
 
@@ -61,6 +61,117 @@ O projeto foi **promovido a produção** e está **recebendo dados reais** de pa
 - Comunicar breaking changes antecipadamente
 
 ## 🎯 Estado Atual do Projeto
+
+### ✅ v1.0.8: Map Loading Race Conditions Fix (06 Jan 2026)
+
+**🐛 CRITICAL BUGFIX: Correção de 7 race conditions no carregamento do mapa**
+
+**Problemas resolvidos:**
+1. Cores dos países desaparecem após carregamento inicial
+2. Imagens dos GPS markers não carregam consistentemente (hard refresh)
+3. Loop infinito de processamento de avatares
+4. Popup mostra dados do país errado em cliques rápidos
+5. Múltiplos fetches simultâneos desperdiçam recursos
+6. Book covers falham com CORS em produção
+7. Usuários sem avatar não aparecem no mapa
+
+**Solução implementada:**
+
+**1. Race #1 - Cores Desaparecem** (CRÍTICO)
+- **Problema:** `setTimeout` vs `useEffect` competindo para aplicar cores → cores aparecem e desaparecem
+- **Causa:** useEffect com `handleCountryClick` nas deps → re-inicializa mapa quando countries chega → layers destruídas → `requestAnimationFrame` falha
+- **Solução:**
+  - Adicionado estado `layersReady` para rastrear quando layers estão prontas
+  - `setLayersReady(true)` no final do callback `map.on('load')`
+  - useEffect de cores só executa após `layersReady === true && countries.length > 0`
+  - `requestAnimationFrame()` garante que layer está totalmente pintada antes de aplicar cores
+  - Removido `setTimeout` que competia com useEffect
+  - useEffect de inicialização usa `deps: []` (não re-inicializa mais)
+- **Arquivos:** `src/components/Map.jsx` (linhas 154, 422, 489-520)
+
+**2. Race #2 - User Markers Source**
+- **Problema:** `setData()` chamado antes da source 'user-markers' existir
+- **Solução:** Check `if (!layersReady)` no useEffect de markers + `layersReady` nas deps
+- **Arquivos:** `src/components/Map.jsx` (linhas 656-664)
+
+**3. Race #3 - Avatares Carregam Devagar** (CRÍTICO)
+- **Problema:** 30+ `Image()` requests paralelos → lentidão + "popping" visual aleatório
+- **Solução - Progressive Enhancement:**
+  - **Fase 1 (síncrona):** Cria placeholders com inicial do usuário (canvas) IMEDIATAMENTE
+  - **Renderização:** Markers aparecem <500ms com placeholders visuais
+  - **Fase 2 (assíncrona):** Queue de avatares reais (5 concorrentes max) em background
+  - **Swap progressivo:** Placeholders substituídos por avatares reais conforme carregam
+  - Novo hook `useAsyncImages` com queue management e concurrency limit
+- **Arquivos:** `src/hooks/useAsyncImages.js` (NOVO, 140 linhas), `src/components/Map.jsx` (linhas 548-654)
+
+**4. Race #4 - Popup Stale Data**
+- **Problema:** Cliques rápidos em vários países → popup mostra dados do país errado (flash)
+- **Solução:**
+  - Estado `currentPopupIso3` rastreia qual país o popup está mostrando
+  - `handleCountryClick` seta `currentPopupIso3` ao abrir popup
+  - useEffect verifica `currentPopupIso3 === popup.iso3` antes de atualizar
+  - `handleClosePopup` limpa `currentPopupIso3`
+- **Arquivos:** `src/components/Map.jsx` (linhas 155, 214, 242-267)
+
+**5. Race #5 - Debounce Clicks**
+- **Problema:** Cliques rápidos disparam múltiplos fetches simultâneos
+- **Solução:** Click handler via `ref` + `useCallback` com deps vazio (evita stale closures)
+- **Arquivos:** `src/components/Map.jsx` (linhas 232-242)
+
+**6. Race #6 - Book Covers CORS**
+- **Problema:** Avatares usam proxy, capas não → CORS falha em produção
+- **Solução:** Proxy adicionado em todas as imagens de capas
+- **Arquivos:** `src/components/CountryPopup.jsx` (linha 101)
+
+**7. Race #7 - Null Avatars**
+- **Problema:** Usuários sem `avatarURL` silenciosamente filtrados
+- **Solução:** Sprite genérico "avatar-placeholder" (círculo cinza com "?")
+- **Arquivos:** `src/components/Map.jsx` (linhas 127, 554-578)
+
+**Bug Fixes Adicionais:**
+
+**8. ImageData Conversion** (CRÍTICO)
+- **Problema:** MapLibre GL JS requer ImageData, não Canvas → `RangeError: mismatched image size`
+- **Solução:** `ctx.getImageData(0, 0, size, size)` em 4 lugares:
+  1. Generic placeholder sprite (linha 575)
+  2. User initial placeholders (linha 627)
+  3. Real avatar circular clip (useAsyncImages.js linha 80)
+  4. Fallback on error (useAsyncImages.js linha 110)
+
+**9. Infinite Loop Prevention**
+- **Problema:** `loadImages` recriado toda vez → triggered useEffect infinitamente → 1000+ users reprocessados em loop
+- **Solução:**
+  - `useCallback` em `processQueue` e `loadImages` no hook
+  - `processedUsersRef` rastreia usuários já processados
+  - Filtra apenas novos usuários: `users.filter(u => !processedUsersRef.has(u.user))`
+- **Arquivos:** `src/hooks/useAsyncImages.js` (linhas 29, 124), `src/components/Map.jsx` (linha 548)
+
+**Arquivos modificados:**
+- `src/components/Map.jsx` - ~150 linhas alteradas (layersReady, progressive enhancement, refs)
+- `src/components/CountryPopup.jsx` - ~5 linhas alteradas (proxy covers)
+- `src/hooks/useAsyncImages.js` - +140 linhas (NOVO - batched image loading)
+
+**Compatibilidade:**
+- ✅ **100% Backward compatible** - sem breaking changes
+- ✅ **Dados antigos** - funcionam sem migração
+- ✅ **Performance:** Carregamento ~75% mais rápido (placeholders <500ms vs avatares 2s+)
+- ✅ **Network:** 83% menos requests paralelos (5 vs 30+)
+
+**Testes:**
+- ✅ Build Next.js sem erros
+- ✅ Cores aplicam e não desaparecem (Slow 3G testado)
+- ✅ Placeholders aparecem <500ms
+- ✅ Avatares carregam progressivamente (5 por vez)
+- ✅ Popup mostra dados corretos em cliques rápidos
+- ✅ Sem loop infinito (logs confirmam 1x processing)
+- ✅ Click nos países funciona corretamente
+
+**Impacto:**
+- Nenhum impacto em dados existentes (mudanças apenas no frontend)
+- Backend não afetado
+- Deploy seguro para produção
+
+---
 
 ### ✅ v1.0.7: Country Readings Popup - Show All Readings (06 Jan 2026)
 
