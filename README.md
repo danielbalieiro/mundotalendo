@@ -48,7 +48,7 @@ This is a **collaborative** project about **discovering cultures** through readi
 - **Platform**: AWS Lambda
 - **Database**: DynamoDB (Single Table Design with GSI)
   - **DataTable** - Single table with UUID-based partition keys:
-    - `EVENT#LEITURA#<uuid>` - Reading events grouped by webhook (v1.0.2+)
+    - `EVENT#LEITURA` - Reading events with SK `<uuid>#<iso3>#<index>` (v1.0.9+)
     - `WEBHOOK#PAYLOAD#<uuid>` - Original payload stored once per webhook (v1.0.2+)
     - `ERROR#<uuid>` - Failed webhook processing logs with UUID tracking
     - `APIKEY#*` - API keys for authentication
@@ -57,8 +57,18 @@ This is a **collaborative** project about **discovering cultures** through readi
     - rangeKey: `PK` (partition key)
     - Enables fast deletion of old user readings
   - **Storage Optimization**: 99% reduction (2.9 GB → 35 MB for 100 users)
+- **Queue**: SQS with Dead Letter Queue (DLQ)
+  - **WebhookQueue** - Async webhook processing with 3 retries
+  - **WebhookDLQ** - Failed messages after 3 attempts
+- **Storage**: S3 PayloadBucket
+  - Stores webhook payloads (90-day lifecycle)
+  - Referenced by UUID in SQS messages
 - **API**: API Gateway V2 (HTTP API with CORS)
 - **Authentication**: API Key via `X-API-Key` header (in-memory validation)
+- **Monitoring**: CloudWatch Alarms
+  - Lambda panic/crash detection (metric filters)
+  - DLQ message alerts
+  - SNS email notifications
 - **Region**: us-east-2 (Ohio)
 
 ### Frontend
@@ -75,6 +85,9 @@ This is a **collaborative** project about **discovering cultures** through readi
 - **DNS**: AWS Route 53
 - **SSL**: AWS Certificate Manager
 - **CDN**: CloudFront
+- **Queue**: Amazon SQS + DLQ
+- **Storage**: Amazon S3 (payload bucket)
+- **Monitoring**: CloudWatch + SNS
 
 ## 📁 Project Structure
 
@@ -108,18 +121,24 @@ mundotalendo/
 │       └── logger.js           # Conditional logging (dev only)
 ├── packages/functions/         # Go Lambda Functions
 │   ├── types/
-│   │   └── types.go            # Shared structs (WebhookPayload, LeituraItem, etc.)
+│   │   └── types.go            # Shared structs (WebhookPayload, LeituraItem, SQSMessage, etc.)
 │   ├── mapping/
 │   │   └── countries.go        # PT-BR country name → ISO3 code (208 countries)
 │   ├── auth/
 │   │   └── auth.go             # API key validation (in-memory match)
-│   ├── webhook/                # POST /webhook - Process reading events
-│   │   ├── main.go
+│   ├── webhook/                # POST /webhook - Queue webhook for async processing
+│   │   ├── main.go             # Saves payload to S3, sends message to SQS
+│   │   └── go.mod
+│   ├── consumer/               # SQS Consumer - Process queued webhooks
+│   │   ├── main.go             # Fetches from S3, writes to DynamoDB
 │   │   └── go.mod
 │   ├── stats/                  # GET /stats - Return country progress
 │   │   ├── main.go
 │   │   └── go.mod
 │   ├── users/                  # GET /users/locations - Return user locations with avatars
+│   │   ├── main.go
+│   │   └── go.mod
+│   ├── readings/               # GET /readings/{iso3} - Return readings for a country
 │   │   ├── main.go
 │   │   └── go.mod
 │   ├── seed/                   # POST /test/seed - Generate test data
@@ -142,7 +161,14 @@ mundotalendo/
 **⚠️ All endpoints require authentication via `X-API-Key` header.**
 
 ### `POST /webhook`
-Receives reading events from Maratona.app
+Receives reading events from Maratona.app (async processing via SQS)
+
+**Processing Flow (v1.0.9+):**
+1. Webhook Lambda validates API key and payload
+2. Saves full payload to S3 (`payloads/{uuid}.json`)
+3. Sends metadata message to SQS queue
+4. Consumer Lambda processes queue (async)
+5. Fetches payload from S3 and writes to DynamoDB
 
 **Validations:**
 - ✅ Filters by `identificador = "maratona-lendo-paises"` OR `"mundotalendo-2026"`
@@ -153,6 +179,7 @@ Receives reading events from Maratona.app
 - ✅ Saves user avatar URL from `perfil.imagem`
 - ✅ Saves complete payload in JSON metadata
 - ✅ Logs failures in separate table
+- ✅ 3 retries via SQS with DLQ for failed messages
 
 **Response Structure:**
 ```json

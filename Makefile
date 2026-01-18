@@ -26,6 +26,7 @@ build: ## Build all Go functions
 	@echo "$(GREEN)Building Go functions...$(NC)"
 	@(cd packages/functions/types && go build .)
 	@(cd packages/functions/webhook && go build .)
+	@(cd packages/functions/consumer && go build .)
 	@(cd packages/functions/stats && go build .)
 	@(cd packages/functions/seed && go build .)
 	@(cd packages/functions/clear && go build .)
@@ -35,6 +36,7 @@ build: ## Build all Go functions
 tidy: ## Update Go dependencies
 	@echo "$(GREEN)Updating Go dependencies...$(NC)"
 	@(cd packages/functions/webhook && go mod tidy)
+	@(cd packages/functions/consumer && go mod tidy)
 	@(cd packages/functions/stats && go mod tidy)
 	@(cd packages/functions/seed && go mod tidy)
 	@(cd packages/functions/clear && go mod tidy)
@@ -57,7 +59,8 @@ deploy-dev: ## Deploy to dev environment and fix env vars
 	@echo "$(GREEN)Deploying to DEV...$(NC)"
 	@echo "\n$(YELLOW)Force rebuilding Go functions...$(NC)"
 	@find packages/functions -type f -name "bootstrap" | xargs rm -f
-	@cd packages/functions/webhook && go build -o bootstrap main.go
+	@cd packages/functions/webhook && go build -o bootstrap .
+	@cd packages/functions/consumer && go build -o bootstrap .
 	@cd packages/functions/stats && go build -o bootstrap main.go
 	@cd packages/functions/users && go build -o bootstrap main.go
 	@cd packages/functions/seed && go build -o bootstrap main.go
@@ -77,7 +80,8 @@ deploy-prod: ## Deploy to prod environment and fix env vars
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo "\n$(YELLOW)Force rebuilding Go functions...$(NC)"; \
 		find packages/functions -type f -name "bootstrap" | xargs rm -f; \
-		(cd packages/functions/webhook && go build -o bootstrap main.go); \
+		(cd packages/functions/webhook && go build -o bootstrap .); \
+		(cd packages/functions/consumer && go build -o bootstrap .); \
 		(cd packages/functions/stats && go build -o bootstrap main.go); \
 		(cd packages/functions/users && go build -o bootstrap main.go); \
 		(cd packages/functions/seed && go build -o bootstrap main.go); \
@@ -556,21 +560,45 @@ fix-env: ## Fix Lambda environment variables (SST bug workaround)
 	@echo "$(YELLOW)Fixing Lambda environment variables...$(NC)"
 	@STAGE=$${STAGE:-dev}; \
 	DATA_TABLE=$$(aws dynamodb list-tables --region $(REGION) --query "TableNames[?contains(@, 'mundotalendo-$$STAGE-DataTable')]" --output text); \
+	PAYLOAD_BUCKET=$$(aws s3api list-buckets --query "Buckets[?contains(Name, 'mundotalendo-$$STAGE-payloadbucket')].Name" --output text); \
+	WEBHOOK_QUEUE=$$(aws sqs list-queues --region $(REGION) --query "QueueUrls[?contains(@, 'mundotalendo-$$STAGE-WebhookQueueQueue')]" --output text); \
 	if [ -z "$$DATA_TABLE" ]; then \
 		echo "$(RED)Error: DataTable not found for stage $$STAGE$(NC)"; \
 		exit 1; \
 	fi; \
-	echo "$(GREEN)Found table:$(NC)"; \
+	echo "$(GREEN)Found resources:$(NC)"; \
 	echo "  DataTable: $$DATA_TABLE"; \
-	echo "\n$(YELLOW)Updating Lambda functions...$(NC)"; \
+	echo "  PayloadBucket: $$PAYLOAD_BUCKET"; \
+	echo "  WebhookQueue: $$WEBHOOK_QUEUE"; \
+	echo "\n$(YELLOW)Updating API Lambda functions...$(NC)"; \
 	for fn in $$(aws lambda list-functions --region $(REGION) --query "Functions[?contains(FunctionName, 'mundotalendo-$$STAGE-ApiRoute')].FunctionName" --output text); do \
 		echo "  Updating $$fn..."; \
-		aws lambda update-function-configuration \
-			--function-name $$fn \
-			--region $(REGION) \
-			--environment "Variables={SST_Resource_DataTable_name=$$DATA_TABLE}" \
-			--output text --query 'FunctionName' 2>&1 | grep -v "An error occurred" || true; \
+		if echo "$$fn" | grep -q "Bahoda"; then \
+			aws lambda update-function-configuration \
+				--function-name $$fn \
+				--region $(REGION) \
+				--environment "Variables={SST_Resource_DataTable_name=$$DATA_TABLE,SST_Resource_PayloadBucket_name=$$PAYLOAD_BUCKET,SST_Resource_WebhookQueue_url=$$WEBHOOK_QUEUE}" \
+				--output text --query 'FunctionName' 2>&1 | grep -v "An error occurred" || true; \
+		else \
+			aws lambda update-function-configuration \
+				--function-name $$fn \
+				--region $(REGION) \
+				--environment "Variables={SST_Resource_DataTable_name=$$DATA_TABLE}" \
+				--output text --query 'FunctionName' 2>&1 | grep -v "An error occurred" || true; \
+		fi; \
 	done; \
+	echo "\n$(YELLOW)Updating Consumer Lambda...$(NC)"; \
+	CONSUMER_FN=$$(aws lambda list-functions --region $(REGION) --query "Functions[?contains(FunctionName, 'mundo') && contains(FunctionName, '$$STAGE') && contains(FunctionName, 'WebhookQueueSubscriber')].FunctionName" --output text); \
+	if [ -n "$$CONSUMER_FN" ]; then \
+		echo "  Updating $$CONSUMER_FN..."; \
+		aws lambda update-function-configuration \
+			--function-name $$CONSUMER_FN \
+			--region $(REGION) \
+			--environment "Variables={SST_Resource_DataTable_name=$$DATA_TABLE,SST_Resource_PayloadBucket_name=$$PAYLOAD_BUCKET}" \
+			--output text --query 'FunctionName' 2>&1 | grep -v "An error occurred" || true; \
+	else \
+		echo "  $(YELLOW)Consumer Lambda not found (may not be deployed yet)$(NC)"; \
+	fi; \
 	echo "\n$(GREEN)Environment variables updated!$(NC)"
 
 # API Key Management
@@ -670,6 +698,74 @@ delete-api-key-prod: ## Delete PROD API key (make delete-api-key-prod name=myapp
 	else \
 		echo "Deletion cancelled."; \
 	fi
+
+# SQS/DLQ Management
+dlq-view: ## View messages in Dead Letter Queue (DEV)
+	@echo "$(GREEN)Viewing DLQ messages...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	DLQ_URL=$$(aws sqs list-queues --region $(REGION) --queue-name-prefix "mundotalendo-$$STAGE-WebhookDLQ" --query 'QueueUrls[0]' --output text 2>/dev/null); \
+	if [ -z "$$DLQ_URL" ] || [ "$$DLQ_URL" = "None" ]; then \
+		echo "$(RED)DLQ not found for stage $$STAGE$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(YELLOW)DLQ URL: $$DLQ_URL$(NC)"; \
+	ATTRS=$$(aws sqs get-queue-attributes --region $(REGION) --queue-url "$$DLQ_URL" --attribute-names ApproximateNumberOfMessages --query 'Attributes.ApproximateNumberOfMessages' --output text); \
+	echo "$(YELLOW)Messages in DLQ: $$ATTRS$(NC)"; \
+	if [ "$$ATTRS" != "0" ]; then \
+		echo "\n$(YELLOW)Sample message (not deleted):$(NC)"; \
+		aws sqs receive-message --region $(REGION) --queue-url "$$DLQ_URL" --max-number-of-messages 1 --visibility-timeout 0 | jq '.Messages[0].Body | fromjson'; \
+	fi
+
+dlq-count: ## Count messages in DLQ (use STAGE=prod for production)
+	@STAGE=$${STAGE:-dev}; \
+	DLQ_URL=$$(aws sqs list-queues --region $(REGION) --queue-name-prefix "mundotalendo-$$STAGE-WebhookDLQ" --query 'QueueUrls[0]' --output text 2>/dev/null); \
+	if [ -z "$$DLQ_URL" ] || [ "$$DLQ_URL" = "None" ]; then \
+		echo "0"; \
+		exit 0; \
+	fi; \
+	aws sqs get-queue-attributes --region $(REGION) --queue-url "$$DLQ_URL" --attribute-names ApproximateNumberOfMessages --query 'Attributes.ApproximateNumberOfMessages' --output text
+
+dlq-purge: ## Purge all messages from DLQ - DEV ONLY
+	@echo "$(RED)Purging DLQ messages...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: dlq-purge is DEV-only for safety.$(NC)"; \
+		exit 1; \
+	fi; \
+	DLQ_URL=$$(aws sqs list-queues --region $(REGION) --queue-name-prefix "mundotalendo-$$STAGE-WebhookDLQ" --query 'QueueUrls[0]' --output text 2>/dev/null); \
+	if [ -z "$$DLQ_URL" ] || [ "$$DLQ_URL" = "None" ]; then \
+		echo "$(RED)DLQ not found$(NC)"; \
+		exit 1; \
+	fi; \
+	read -p "Are you sure you want to purge all DLQ messages? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		aws sqs purge-queue --region $(REGION) --queue-url "$$DLQ_URL"; \
+		echo "$(GREEN)DLQ purged!$(NC)"; \
+	fi
+
+queue-stats: ## Show SQS queue statistics (use STAGE=prod for production)
+	@echo "$(GREEN)SQS Queue Statistics...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	echo "$(YELLOW)Stage: $$STAGE$(NC)"; \
+	QUEUE_URL=$$(aws sqs list-queues --region $(REGION) --queue-name-prefix "mundotalendo-$$STAGE-WebhookQueue" --query 'QueueUrls[0]' --output text 2>/dev/null); \
+	DLQ_URL=$$(aws sqs list-queues --region $(REGION) --queue-name-prefix "mundotalendo-$$STAGE-WebhookDLQ" --query 'QueueUrls[0]' --output text 2>/dev/null); \
+	if [ -n "$$QUEUE_URL" ] && [ "$$QUEUE_URL" != "None" ]; then \
+		echo "\n$(YELLOW)Main Queue:$(NC)"; \
+		aws sqs get-queue-attributes --region $(REGION) --queue-url "$$QUEUE_URL" \
+			--attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed \
+			--query 'Attributes' --output table; \
+	fi; \
+	if [ -n "$$DLQ_URL" ] && [ "$$DLQ_URL" != "None" ]; then \
+		echo "\n$(YELLOW)Dead Letter Queue:$(NC)"; \
+		aws sqs get-queue-attributes --region $(REGION) --queue-url "$$DLQ_URL" \
+			--attribute-names ApproximateNumberOfMessages \
+			--query 'Attributes' --output table; \
+	fi
+
+test-consumer: ## Run consumer unit tests
+	@echo "$(GREEN)Running consumer tests...$(NC)"
+	@cd packages/functions/consumer && go test -v
 
 # Git
 commit: ## Quick commit (make commit m="message")

@@ -113,3 +113,12 @@ type UserLocationsResponse struct {
 	Users []UserLocation `json:"users"`
 	Total int            `json:"total"`
 }
+
+// SQSMessage represents the message sent to SQS queue for async webhook processing.
+// Contains only metadata; the full payload is stored in S3 for cost efficiency.
+// The consumer Lambda fetches the payload from S3 using the UUID as the key.
+type SQSMessage struct {
+	UUID      string `json:"uuid"`      // Webhook UUID - used as S3 key (payloads/{uuid}.json)
+	User      string `json:"user"`      // User name from perfil.nome
+	Timestamp string `json:"timestamp"` // RFC3339 timestamp of webhook reception
+}

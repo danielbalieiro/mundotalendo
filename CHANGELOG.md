@@ -5,6 +5,51 @@ All notable changes to the Mundo Tá Lendo 2026 project will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-01-17
+
+### Added
+- **Async Webhook Processing**: Complete architecture overhaul for reliability
+  - S3 PayloadBucket stores webhook payloads (90-day lifecycle)
+  - SQS WebhookQueue with 3 retries, 90s visibility timeout
+  - SQS Dead Letter Queue (DLQ) for failed messages
+  - Consumer Lambda processes SQS messages asynchronously
+- **Lambda Panic Alarms**: Proactive monitoring for crashes
+  - CloudWatch Metric Filters for "panic", "nil pointer dereference", "runtime error"
+  - WebhookPanicAlarm - triggers on webhook Lambda crashes
+  - ConsumerPanicAlarm - triggers on consumer Lambda crashes
+  - SNS email notifications for all alarms
+- **SQSMessage Type**: New struct in `types/types.go` for queue messages
+  - Contains UUID (S3 key), User, and Timestamp
+
+### Changed
+- **Webhook Lambda**: Now saves to S3 and queues to SQS instead of direct DynamoDB writes
+- **Makefile fix-env**: Updated to include PayloadBucket, WebhookQueue, and Consumer Lambda
+- **sst.config.ts**: Added S3, SQS, DLQ, Consumer Lambda, and alarm resources
+- **CLAUDE.md**: Updated with async architecture documentation
+
+### Fixed
+- **PROD Deployment Bug**: Lambda environment variables not being set by SST
+  - Webhook Lambda missing `SST_Resource_PayloadBucket_name` and `SST_Resource_WebhookQueue_url`
+  - Consumer Lambda missing `SST_Resource_DataTable_name` and `SST_Resource_PayloadBucket_name`
+  - `make fix-env` now updates both Lambdas after deploy
+
+### Technical Details
+- **Webhook Flow**: POST → Validate → S3 → SQS → Response (async DynamoDB via Consumer)
+- **Consumer Duration**: ~32-36ms per message
+- **Test Results**: 1,225 webhooks → 1,529 DynamoDB leituras, 0 DLQ messages
+- **Files Added**: `packages/functions/consumer/` (main.go, go.mod, go.sum)
+
+---
+
+## [1.0.8] - 2026-01-10
+
+### Fixed
+- **Race Condition**: Fixed concurrent map loading issue causing crashes
+  - Countries map was being accessed before fully initialized
+  - Added mutex protection for thread-safe access
+
+---
+
 ## [1.0.7] - 2026-01-06
 
 ### Added

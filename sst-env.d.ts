@@ -17,8 +17,20 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "PayloadBucket": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
     "Web": {
       "type": "sst.aws.Nextjs"
+      "url": string
+    }
+    "WebhookDLQ": {
+      "type": "sst.aws.Queue"
+      "url": string
+    }
+    "WebhookQueue": {
+      "type": "sst.aws.Queue"
       "url": string
     }
   }

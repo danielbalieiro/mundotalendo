@@ -36,6 +36,61 @@ export default $config({
       },
     });
 
+    // S3 Bucket for webhook payloads (cheaper than DynamoDB for large payloads)
+    const payloadBucket = new sst.aws.Bucket("PayloadBucket", {
+      transform: {
+        bucket: (args) => {
+          args.lifecycleRules = [
+            {
+              id: "expire-old-payloads",
+              enabled: true,
+              expirations: [{ days: 90 }],
+            },
+          ];
+        },
+      },
+    });
+
+    // Dead Letter Queue for failed webhook messages
+    const webhookDLQ = new sst.aws.Queue("WebhookDLQ", {
+      transform: {
+        queue: (args) => {
+          args.messageRetentionSeconds = 1209600; // 14 days
+        },
+      },
+    });
+
+    // Main webhook processing queue
+    const webhookQueue = new sst.aws.Queue("WebhookQueue", {
+      dlq: {
+        queue: webhookDLQ.arn,
+        retry: 3, // 3 retries before DLQ
+      },
+      transform: {
+        queue: (args) => {
+          args.visibilityTimeoutSeconds = 90; // Must be >= consumer timeout
+          args.messageRetentionSeconds = 345600; // 4 days
+        },
+      },
+    });
+
+    // Consumer Lambda - processes messages from SQS
+    webhookQueue.subscribe({
+      handler: "packages/functions/consumer",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable, payloadBucket],
+      timeout: "60 seconds",
+      memory: "512 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 10;
+        },
+      },
+    }, {
+      batch: { size: 1 },
+    });
+
     // API Gateway with inline route definitions
     const api = new sst.aws.ApiGatewayV2("Api", {
       cors: {
@@ -65,9 +120,9 @@ export default $config({
       handler: "packages/functions/webhook",
       runtime: "go",
       architecture: "arm64",
-      link: [dataTable],
-      timeout: "30 seconds",
-      memory: "256 MB",
+      link: [dataTable, payloadBucket, webhookQueue],
+      timeout: "10 seconds", // Reduced - only validation and queueing
+      memory: "128 MB",      // Reduced - less processing
       transform: {
         function: (args) => {
           args.reservedConcurrentExecutions = 10;
@@ -214,6 +269,11 @@ export default $config({
 
     const clearLogGroup = new aws.cloudwatch.LogGroup("ClearLogGroup", {
       name: `/aws/lambda/${$app.name}-${$app.stage}-clear`,
+      retentionInDays: logRetentionDays,
+    });
+
+    const consumerLogGroup = new aws.cloudwatch.LogGroup("ConsumerLogGroup", {
+      name: `/aws/lambda/${$app.name}-${$app.stage}-consumer`,
       retentionInDays: logRetentionDays,
     });
 
@@ -474,6 +534,110 @@ export default $config({
       alarmActions: [alarmTopic.arn],
     });
 
+    // DLQ Alarm - Critical: Messages failing all retries
+    new aws.cloudwatch.MetricAlarm("WebhookDLQAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-webhook-dlq-messages`,
+      alarmDescription: "CRITICAL: Webhook messages failing all retries - investigate immediately",
+      metricName: "ApproximateNumberOfMessagesVisible",
+      namespace: "AWS/SQS",
+      dimensions: {
+        QueueName: webhookDLQ.name,
+      },
+      statistic: "Sum",
+      period: 60,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    // Consumer error metrics
+    new aws.cloudwatch.LogMetricFilter("ConsumerProcessingErrorMetric", {
+      logGroupName: consumerLogGroup.name,
+      name: "ConsumerProcessingErrors",
+      pattern: '"ERROR"',
+      metricTransformation: {
+        name: "ConsumerProcessingErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("ConsumerS3FetchErrorMetric", {
+      logGroupName: consumerLogGroup.name,
+      name: "ConsumerS3FetchErrors",
+      pattern: '"Error fetching payload from S3"',
+      metricTransformation: {
+        name: "ConsumerS3FetchErrorCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    // Lambda Panic/Crash metric filters - catches nil pointer, panics, runtime errors
+    new aws.cloudwatch.LogMetricFilter("WebhookPanicMetric", {
+      logGroupName: webhookLogGroup.name,
+      name: "WebhookPanics",
+      pattern: '?"panic" ?"nil pointer dereference" ?"runtime error"',
+      metricTransformation: {
+        name: "WebhookPanicCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    new aws.cloudwatch.LogMetricFilter("ConsumerPanicMetric", {
+      logGroupName: consumerLogGroup.name,
+      name: "ConsumerPanics",
+      pattern: '?"panic" ?"nil pointer dereference" ?"runtime error"',
+      metricTransformation: {
+        name: "ConsumerPanicCount",
+        namespace: metricNamespace,
+        value: "1",
+        defaultValue: "0",
+        unit: "Count",
+      },
+    });
+
+    // Lambda Panic Alarms - CRITICAL: Catches crashes before any logging
+    new aws.cloudwatch.MetricAlarm("WebhookPanicAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-webhook-panic`,
+      alarmDescription: "CRITICAL: Webhook Lambda is crashing/panicking - immediate attention required",
+      metricName: "WebhookPanicCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 60,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
+    new aws.cloudwatch.MetricAlarm("ConsumerPanicAlarm", {
+      alarmName: `${$app.name}-${$app.stage}-consumer-panic`,
+      alarmDescription: "CRITICAL: Consumer Lambda is crashing/panicking - webhooks NOT being processed",
+      metricName: "ConsumerPanicCount",
+      namespace: metricNamespace,
+      statistic: "Sum",
+      period: 60,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+      actionsEnabled: true,
+      alarmActions: [alarmTopic.arn],
+    });
+
     // CloudWatch Dashboard
     const dashboard = new aws.cloudwatch.Dashboard("ProductionDashboard", {
       dashboardName: `${$app.name}-${$app.stage}-dashboard`,
@@ -555,6 +719,9 @@ export default $config({
       api: api.url,
       web: web.url,
       dataTable: dataTable.name,
+      payloadBucket: payloadBucket.name,
+      webhookQueue: webhookQueue.url,
+      webhookDLQ: webhookDLQ.url,
     };
   },
 });
