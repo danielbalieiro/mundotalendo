@@ -1,6 +1,6 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Versão:** v1.0.9 | **Status:** EM PRODUÇÃO
+> **Versão:** v1.1.0 | **Status:** EM PRODUÇÃO
 > **URLs:** https://mundotalendo.com.br | https://api.mundotalendo.com.br
 > **Dev:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
 
@@ -173,6 +173,11 @@ Payload esperado:
 4. Comandos destrutivos bloqueados em produção
 
 ## Changelog
+
+### v1.1.0 - Node.js 22.x Runtime Upgrade
+- **Server Lambda runtime**: Atualizado de `nodejs20.x` para `nodejs22.x`
+- **SST atualizado**: v3.17.25 → v3.17.38
+- **Nota**: ImageOptimizer e Revalidation ainda em `nodejs20.x` (hardcoded no SST, aguardando upstream fix)
 
 ### v1.0.9 - Async Webhook Processing
 - **Arquitetura async**: Webhook → S3 + SQS → Consumer → DynamoDB

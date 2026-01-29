@@ -81,7 +81,7 @@ This is a **collaborative** project about **discovering cultures** through readi
 - **Deploy**: CloudFront + S3
 
 ### Infrastructure
-- **IaC**: SST v3.17.25 (Ion)
+- **IaC**: SST v3.17.38 (Ion)
 - **DNS**: AWS Route 53
 - **SSL**: AWS Certificate Manager
 - **CDN**: CloudFront

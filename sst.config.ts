@@ -217,6 +217,9 @@ export default $config({
     // Next.js Frontend
     const web = new sst.aws.Nextjs("Web", {
       path: "./",
+      server: {
+        runtime: "nodejs22.x",
+      },
       environment: {
         NEXT_PUBLIC_API_URL: api.domain?.name
           ? `https://${api.domain.name}`
