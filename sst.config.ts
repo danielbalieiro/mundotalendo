@@ -44,7 +44,7 @@ export default $config({
             {
               id: "expire-old-payloads",
               enabled: true,
-              expirations: [{ days: 90 }],
+              expiration: { days: 90 },
             },
           ];
         },

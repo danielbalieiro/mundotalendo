@@ -1,6 +1,6 @@
 # Claude Context - Mundo Tá Lendo 2026
 
-> **Versão:** v1.1.0 | **Status:** EM PRODUÇÃO
+> **Versão:** v1.2.0 | **Status:** EM PRODUÇÃO
 > **URLs:** https://mundotalendo.com.br | https://api.mundotalendo.com.br
 > **Dev:** https://dev.mundotalendo.com.br | https://api.dev.mundotalendo.com.br
 
@@ -173,6 +173,12 @@ Payload esperado:
 4. Comandos destrutivos bloqueados em produção
 
 ## Changelog
+
+### v1.2.0 - SST v4 Migration
+- **SST atualizado**: v3.17.38 → v4.2.4 (Pulumi AWS v6 → v7.20.0)
+- **Fix de compatibilidade**: `lifecycleRules[].expirations` → `expiration` (Pulumi AWS v7)
+- **ImageOptimizer/Revalidation**: agora em nodejs22.x (fix upstream incluído no v4)
+- **fix-env**: ainda necessário no v4
 
 ### v1.1.0 - Node.js 22.x Runtime Upgrade
 - **Server Lambda runtime**: Atualizado de `nodejs20.x` para `nodejs22.x`
