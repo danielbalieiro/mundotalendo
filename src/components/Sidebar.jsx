@@ -35,6 +35,14 @@ export default function Sidebar({ year, onYearChange }) {
     .sort((a, b) => b - a)
   const sortedCountries = [...(countries || [])].sort((a, b) => b.progress - a.progress)
 
+  // Group each reader's latest book by country for the "books per country" list.
+  const usersByCountry = {}
+  ;(users || []).forEach((u) => {
+    if (!u.iso3) return
+    if (!usersByCountry[u.iso3]) usersByCountry[u.iso3] = []
+    usersByCountry[u.iso3].push(u)
+  })
+
   return (
     <>
       {/* Toggle button (visible when closed) */}
@@ -124,25 +132,43 @@ export default function Sidebar({ year, onYearChange }) {
             <p className="text-sm text-gray-500">Nenhuma leitura registrada para este ano.</p>
           ) : (
             <ul className="space-y-3">
-              {sortedCountries.map((c) => (
-                <li key={c.iso3}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-800 font-medium">
-                      {getCountryName(c.iso3) || c.iso3}
-                    </span>
-                    <span className="text-gray-500">{c.progress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full"
-                      style={{
-                        width: `${c.progress}%`,
-                        backgroundColor: getCountryProgressColor(c.iso3, c.progress, months),
-                      }}
-                    />
-                  </div>
-                </li>
-              ))}
+              {sortedCountries.map((c) => {
+                const books = usersByCountry[c.iso3] || []
+                return (
+                  <li key={c.iso3}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="text-gray-800 font-medium">
+                        {getCountryName(c.iso3) || c.iso3}
+                      </span>
+                      <span className="text-gray-500">{c.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className="h-1.5 rounded-full"
+                        style={{
+                          width: `${c.progress}%`,
+                          backgroundColor: getCountryProgressColor(c.iso3, c.progress, months),
+                        }}
+                      />
+                    </div>
+
+                    {books.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {books.map((b) => (
+                          <li
+                            key={`${c.iso3}-${b.user}-${b.livro}`}
+                            className="flex items-center gap-2 text-xs text-gray-600"
+                          >
+                            <span className="shrink-0">📖</span>
+                            <span className="truncate">{b.livro || 'Sem título'}</span>
+                            <span className="text-gray-400 ml-auto shrink-0">{b.user}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
