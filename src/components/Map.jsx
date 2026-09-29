@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import { useStats } from '@/hooks/useStats'
 import { useUserLocations } from '@/hooks/useUserLocations'
 import useCountryReadings from '@/hooks/useCountryReadings'
