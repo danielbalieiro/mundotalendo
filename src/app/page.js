@@ -70,6 +70,7 @@ function HomeContent() {
             width={300}
             height={60}
             priority
+            unoptimized
             className="h-10 md:h-16 w-auto"
           />
         </div>
