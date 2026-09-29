@@ -23,7 +23,16 @@ export default function Sidebar({ year, onYearChange }) {
   const { users } = useUserLocations(year)
 
   // Always offer the selected year and the current year, even if they have no data yet.
-  const options = [...new Set([...(years || []), year, DEFAULT_YEAR])].sort((a, b) => b - a)
+  // Normalize to numbers so string years from the API and numeric values dedupe correctly.
+  const options = [
+    ...new Set([
+      ...(years || []).map((y) => Number(y)),
+      Number(year),
+      DEFAULT_YEAR,
+    ]),
+  ]
+    .filter((y) => Number.isInteger(y))
+    .sort((a, b) => b - a)
   const sortedCountries = [...(countries || [])].sort((a, b) => b.progress - a.progress)
 
   return (
@@ -99,7 +108,7 @@ export default function Sidebar({ year, onYearChange }) {
         {/* Country list */}
         <div className="flex-1 overflow-y-auto p-4">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            Países sendo lidos
+            {year === DEFAULT_YEAR ? 'Países sendo lidos' : 'Países lidos'}
           </h3>
 
           {statsLoading ? (
