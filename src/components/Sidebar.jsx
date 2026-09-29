@@ -28,26 +28,35 @@ export default function Sidebar({ year, onYearChange }) {
 
   return (
     <>
-      {/* Mobile toggle button */}
-      <button
-        onClick={() => setIsOpen((v) => !v)}
-        className="md:hidden fixed top-4 left-4 z-40 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg px-3 py-2 text-gray-700 hover:bg-white transition-colors"
-        aria-label="Abrir painel de estatísticas"
-        aria-expanded={isOpen}
-      >
-        ☰
-      </button>
+      {/* Toggle button (visible when closed) */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed top-4 left-4 z-40 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg px-4 py-3 text-gray-700 hover:bg-white transition-colors"
+          aria-label="Abrir painel de estatísticas"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            ☰ Estatísticas
+          </span>
+        </button>
+      )}
 
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-30 w-80 max-w-[85vw] bg-white shadow-xl flex flex-col
           transform transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:static md:translate-x-0 md:shadow-none md:border-r md:border-gray-200`}
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Header */}
-        <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+        <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white flex justify-between items-center">
           <h2 className="font-bold text-lg">Estatísticas</h2>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="text-white hover:bg-white/20 rounded-full w-6 h-6 flex items-center justify-center"
+            aria-label="Fechar painel de estatísticas"
+          >
+            ✕
+          </button>
         </div>
 
         {/* Year filter */}

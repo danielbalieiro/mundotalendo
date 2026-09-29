@@ -277,6 +277,13 @@ export default function Map({ year }) {
   useEffect(() => {
     if (map.current) return // Initialize map only once
 
+    // Point MapLibre to the worker files served from /public.
+    // The default worker URL relies on bundler-specific asset emission, which
+    // fails under Turbopack/Webpack (returns HTML -> "Worker failed to load").
+    if (typeof maplibregl.setWorkerUrl === 'function') {
+      maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs')
+    }
+
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: {
