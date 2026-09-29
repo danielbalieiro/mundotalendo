@@ -45,7 +45,7 @@ export default function Sidebar({ year, onYearChange }) {
           aria-label="Abrir painel de estatísticas"
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
-            ☰ Estatísticas
+            ☰ {year}
           </span>
         </button>
       )}
