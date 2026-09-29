@@ -63,7 +63,7 @@ function HomeContent() {
       {/* Map area */}
       <div className="relative flex-1 h-full">
         {/* Header */}
-        <div className="absolute top-0 left-0 right-0 z-10 p-4 md:p-6 pl-16">
+        <div className="absolute top-0 left-0 right-0 z-10 p-4 md:p-6">
           <Image
             src="/mundotalendo.png"
             alt="Mundo Tá Lendo"

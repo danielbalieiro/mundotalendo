@@ -1,5 +1,5 @@
 /**
- * Color tier utilities for the Mundo Tá Lendo 2026 project
+ * Color tier utilities for the Mundo Tá Lendo project
  * Handles mapping of progress percentages to color tiers
  */
 

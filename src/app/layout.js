@@ -3,8 +3,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 /** @type {import("next").Metadata} */
 export const metadata = {
-  title: 'Mundo Tá Lendo 2026',
-  description: 'Mapa global da maratona de 2026 Mundo Tá Lendo',
+  title: 'Mundo Tá Lendo',
+  description: 'Mapa global da maratona de leitura colaborativa Mundo Tá Lendo',
 }
 
 /**

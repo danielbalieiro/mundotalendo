@@ -46,6 +46,19 @@ func getAllCountries() []string {
 	return countries
 }
 
+// randomTimestampInYear returns a random timestamp. For the current year it
+// stays within the last 30 days; for past years it picks a random day in that
+// year so the UpdatedAt values look realistic.
+func randomTimestampInYear(year int) time.Time {
+	now := time.Now()
+	if year == now.Year() {
+		daysAgo := rng.Intn(30)
+		return now.AddDate(0, 0, -daysAgo)
+	}
+	dayOfYear := rng.Intn(365)
+	return time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, dayOfYear)
+}
+
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Println("Seeding database with random countries")
 
@@ -65,16 +78,23 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		}, nil
 	}
 
-	// Parse request for count (default 10)
+	// Parse request for count (default 10) and year (default current year)
 	count := 10
+	year := time.Now().Year()
 	if request.Body != "" {
 		var req struct {
 			Count int `json:"count"`
+			Year  int `json:"year"`
 		}
-		if err := json.Unmarshal([]byte(request.Body), &req); err == nil && req.Count > 0 {
-			count = req.Count
-			if count > 100 {
-				count = 100 // Safety limit
+		if err := json.Unmarshal([]byte(request.Body), &req); err == nil {
+			if req.Count > 0 {
+				count = req.Count
+				if count > 100 {
+					count = 100 // Safety limit
+				}
+			}
+			if req.Year >= 2000 && req.Year <= 2999 {
+				year = req.Year
 			}
 		}
 	}
@@ -83,7 +103,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	inserted := 0
 	categories := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
 		"Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
-	year := strconv.Itoa(time.Now().Year())
+	yearStr := strconv.Itoa(year)
 
 	for i := 0; i < count; i++ {
 		// Random country
@@ -96,9 +116,8 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		// Random category (month)
 		randomCategory := categories[rng.Intn(len(categories))]
 
-		// Random timestamp within the last 30 days
-		daysAgo := rng.Intn(30)
-		timestamp := time.Now().AddDate(0, 0, -daysAgo)
+		// Random timestamp within the target year
+		timestamp := randomTimestampInYear(year)
 
 		// Random progress 0-100
 		randomProgress := rng.Intn(101)
@@ -146,7 +165,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 
 		// Create reading item with UUID-based keys (matching the consumer processor)
 		item := types.LeituraItem{
-			PK:          fmt.Sprintf("EVENT#LEITURA#%s", year),
+			PK:          fmt.Sprintf("EVENT#LEITURA#%s", yearStr),
 			SK:          fmt.Sprintf("%s#%s#%d", seedUUID, iso3, 0),
 			ISO3:        iso3,
 			Pais:        randomCountry,
@@ -155,7 +174,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			User:        userName,
 			ImagemURL:   fmt.Sprintf("https://i.pravatar.cc/150?u=%s", userName),
 			Livro:       fmt.Sprintf("Livro sobre %s", randomCountry),
-			Year:        year,
+			Year:        yearStr,
 			WebhookUUID: seedUUID,
 			UpdatedAt:   timestamp.Format(time.RFC3339),
 		}

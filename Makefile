@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats users clear migrate migrate-year logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed seed-years stats users clear migrate migrate-year logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
 # ⚠️ IMPORTANT: This project uses us-east-2 (Ohio) region
 # All AWS commands MUST use --region us-east-2
@@ -255,6 +255,29 @@ seed: ## Populate database with random data (count=20) - DEV ONLY (not supported
 		-H "Content-Type: application/json" \
 		-H "X-API-Key: $$API_KEY" \
 		-d '{"count": 20}' | jq .
+
+seed-years: ## Generate random readings for the 5 previous years - DEV ONLY (not supported in prod for safety)
+	@echo "$(GREEN)Seeding the 5 previous years with random readings...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	if [ "$$STAGE" != "dev" ]; then \
+		echo "$(RED)Error: seed-years is DEV-only for safety.$(NC)"; \
+		exit 1; \
+	fi; \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	CURRENT_YEAR=$$(date +%Y); \
+	for YEAR in $$(seq $$((CURRENT_YEAR-1)) -1 $$((CURRENT_YEAR-5))); do \
+		COUNT=$$((RANDOM % 16 + 5)); \
+		echo "$(YELLOW)Seeding year $$YEAR with $$COUNT readings...$(NC)"; \
+		curl -s -X POST $(API_DEV)/test/seed \
+			-H "Content-Type: application/json" \
+			-H "X-API-Key: $$API_KEY" \
+			-d "{\"count\": $$COUNT, \"year\": $$YEAR}" | jq .; \
+	done; \
+	echo "$(GREEN)Done! Check with: make stats (or the year dropdown in the app)$(NC)"
 
 stats: ## Get reading statistics from API (use STAGE=prod for production)
 	@echo "$(GREEN)Fetching stats...$(NC)"
