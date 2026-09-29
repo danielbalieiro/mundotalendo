@@ -44,14 +44,16 @@ const fetcher = async (url) => {
 /**
  * Hook to fetch stats from the API with auto-refresh
  * @param {number} [refreshInterval=60000] - Refresh interval in milliseconds (default: 60s)
+ * @param {number|string} [year] - Year to fetch stats for (defaults to the current year server-side)
  * @returns {Object} SWR response with data, error, and isLoading
  */
-export function useStats(refreshInterval = 60000) {
+export function useStats(refreshInterval = 60000, year) {
   // Use local API route for development, or external API URL for production
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+  const yearQuery = year ? `?year=${encodeURIComponent(year)}` : ''
 
   const { data, error, isLoading } = useSWR(
-    `${apiUrl}/stats`,
+    `${apiUrl}/stats${yearQuery}`,
     fetcher,
     {
       refreshInterval, // Auto-refresh every 60 seconds (reduced from 15s)

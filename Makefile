@@ -1,4 +1,4 @@
-.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats users clear logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
+.PHONY: help build clean dev deploy-dev deploy-prod check-deps test-api test-frontend test-backend test-all test-coverage seed stats users clear migrate migrate-year logs-webhook logs-stats logs-all alarms metrics alarms-prod metrics-prod logs-all-prod info info-prod unlock
 
 # ⚠️ IMPORTANT: This project uses us-east-2 (Ohio) region
 # All AWS commands MUST use --region us-east-2
@@ -339,6 +339,20 @@ migrate: ## Migrate existing data to populate book covers (capaURL) - supports S
 	echo "$(YELLOW)API URL: $$API_URL$(NC)"; \
 	echo "$(YELLOW)This may take a few minutes for large datasets...$(NC)"; \
 	curl -s -X POST $$API_URL/migrate \
+		-H "X-API-Key: $$API_KEY" | jq .
+
+migrate-year: ## Migrate existing readings to add year (default 2026) - supports STAGE=prod (use year=2027 to override)
+	@echo "$(YELLOW)Running migration to add year to existing readings...$(NC)"
+	@STAGE=$${STAGE:-dev}; \
+	API_URL=$$(if [ "$$STAGE" = "prod" ]; then echo "$(API_PROD)"; else echo "$(API_DEV)"; fi); \
+	API_KEY=$$(STAGE=$$STAGE $(MAKE) -s get-api-key); \
+	if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "None" ]; then \
+		echo "$(RED)Error: No API key found. Create one with: make create-api-key name=test$(NC)"; \
+		exit 1; \
+	fi; \
+	YEAR=$${year:-2026}; \
+	echo "$(YELLOW)Stage: $$STAGE | Year: $$YEAR$(NC)"; \
+	curl -s -X POST "$$API_URL/migrate-year?year=$$YEAR" \
 		-H "X-API-Key: $$API_KEY" | jq .
 
 webhook-test: ## Test webhook with sample payload - DEV ONLY (not supported in prod for safety)

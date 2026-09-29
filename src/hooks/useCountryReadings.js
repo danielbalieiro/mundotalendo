@@ -9,14 +9,15 @@ export default function useCountryReadings() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchReadings = useCallback(async (iso3) => {
+  const fetchReadings = useCallback(async (iso3, year) => {
     setLoading(true);
     setError(null);
     setReadings([]);
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
-      const response = await fetch(`${apiUrl}/readings/${iso3}`, {
+      const yearQuery = year ? `?year=${encodeURIComponent(year)}` : '';
+      const response = await fetch(`${apiUrl}/readings/${iso3}${yearQuery}`, {
         headers: {
           'X-API-Key': process.env.NEXT_PUBLIC_API_KEY || '',
         },

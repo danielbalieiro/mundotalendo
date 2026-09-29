@@ -194,16 +194,19 @@ func TestValidIdentifiers(t *testing.T) {
 	}{
 		{"maratona-lendo-paises", true},
 		{"mundotalendo-2026", true},
+		{"mundotalendo-2027", true},
+		{"mundotalendo-2030", true},
 		{"other-marathon", false},
 		{"", false},
 		{"random-id", false},
+		{"mundotalendo-", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.identificador, func(t *testing.T) {
-			result := ValidIdentifiers[tt.identificador]
+			result := isValidIdentifier(tt.identificador)
 			if result != tt.expected {
-				t.Errorf("ValidIdentifiers[%q] = %v, want %v", tt.identificador, result, tt.expected)
+				t.Errorf("isValidIdentifier(%q) = %v, want %v", tt.identificador, result, tt.expected)
 			}
 		})
 	}

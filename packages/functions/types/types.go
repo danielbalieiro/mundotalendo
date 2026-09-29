@@ -47,10 +47,10 @@ type Vinculado struct {
 // DynamoDB item structures
 
 // LeituraItem - Item de leitura (país) com rastreamento UUID
-// PK: "EVENT#LEITURA" - agrupa todos os eventos de leitura
+// PK: "EVENT#LEITURA#<year>" - agrupa os eventos de leitura por ano
 // SK: "<uuid>#<iso3>#<index>" - identifica livro único (UUID + país + índice)
 type LeituraItem struct {
-	PK        string `dynamodbav:"PK"`        // "EVENT#LEITURA"
+	PK        string `dynamodbav:"PK"`        // "EVENT#LEITURA#<year>"
 	SK        string `dynamodbav:"SK"`        // "<uuid>#<iso3>#<index>"
 	ISO3      string `dynamodbav:"iso3"`      // Código ISO 3166-1 Alpha-3
 	Pais      string `dynamodbav:"pais"`      // Nome do país em português
@@ -60,6 +60,7 @@ type LeituraItem struct {
 	ImagemURL string `dynamodbav:"imagemURL"` // URL do avatar do usuário
 	CapaURL   string `dynamodbav:"capaURL"`   // URL da capa do livro
 	Livro     string `dynamodbav:"livro"`     // Título do livro sendo lido
+	Year      string `dynamodbav:"year"`      // Ano da maratona (ex.: "2026")
 
 	// v1.0.3: UUID separado para rastreamento + timestamp de update
 	WebhookUUID string `dynamodbav:"webhookUUID"` // UUID da execução do webhook

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -138,6 +139,12 @@ func (c *Consumer) processRecord(ctx context.Context, record events.SQSMessage) 
 
 	log.Printf("Processing webhook UUID=%s, User=%s", msg.UUID, msg.User)
 
+	// Derive the marathon year from the webhook reception time.
+	// The year is captured when the data is received from Maratona.app
+	// and stored on every reading to support querying multiple years.
+	recvTime := parseTimestamp(msg.Timestamp)
+	year := strconv.Itoa(recvTime.Year())
+
 	// Fetch payload from S3
 	payload, err := c.fetcher.FetchPayload(ctx, msg.UUID)
 	if err != nil {
@@ -145,8 +152,8 @@ func (c *Consumer) processRecord(ctx context.Context, record events.SQSMessage) 
 		return WrapError("fetch_payload", msg.UUID, "", err)
 	}
 
-	// Delete old user readings
-	if _, err := c.store.DeleteOldUserReadings(ctx, msg.User); err != nil {
+	// Delete old user readings (scoped to the same year)
+	if _, err := c.store.DeleteOldUserReadings(ctx, msg.User, year); err != nil {
 		// Log warning but continue - this is not a fatal error
 		log.Printf("WARN: Failed to delete old readings: %v", err)
 	}
@@ -156,7 +163,8 @@ func (c *Consumer) processRecord(ctx context.Context, record events.SQSMessage) 
 		UUID:      msg.UUID,
 		User:      payload.Perfil.Nome,
 		AvatarURL: payload.Perfil.Imagem,
-		Timestamp: parseTimestamp(msg.Timestamp),
+		Timestamp: recvTime,
+		Year:      year,
 	}
 
 	processed, errCount, results := c.processor.ProcessAll(ctx, payload, meta)

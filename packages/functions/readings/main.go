@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -59,8 +61,11 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	}
 	client := dynamodb.NewFromConfig(cfg)
 
+	// Resolve the year to query (defaults to the current year)
+	year := resolveYear(request)
+
 	// Query DynamoDB for all readings in this country
-	readings, err := fetchReadings(ctx, client, tableName, iso3)
+	readings, err := fetchReadings(ctx, client, tableName, iso3, year)
 	if err != nil {
 		return errorResponse(http.StatusInternalServerError, fmt.Sprintf("Database query failed: %v", err)), nil
 	}
@@ -80,14 +85,14 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	}, nil
 }
 
-func fetchReadings(ctx context.Context, client *dynamodb.Client, tableName, iso3 string) ([]sharedTypes.LeituraItem, error) {
-	// Query: PK = "EVENT#LEITURA" with filter on iso3 and progresso >= 1
+func fetchReadings(ctx context.Context, client *dynamodb.Client, tableName, iso3, year string) ([]sharedTypes.LeituraItem, error) {
+	// Query: PK = "EVENT#LEITURA#<year>" with filter on iso3 and progresso >= 1
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(tableName),
 		KeyConditionExpression: aws.String("PK = :pk"),
 		FilterExpression:       aws.String("iso3 = :iso3 AND progresso >= :minProgress"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk":          &types.AttributeValueMemberS{Value: "EVENT#LEITURA"},
+			":pk":          &types.AttributeValueMemberS{Value: "EVENT#LEITURA#" + year},
 			":iso3":        &types.AttributeValueMemberS{Value: iso3},
 			":minProgress": &types.AttributeValueMemberN{Value: "1"},
 		},
@@ -143,6 +148,14 @@ func isAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+// resolveYear extracts the year from the query string, defaulting to the current year.
+func resolveYear(request events.APIGatewayV2HTTPRequest) string {
+	if y := strings.TrimSpace(request.QueryStringParameters["year"]); y != "" {
+		return y
+	}
+	return strconv.Itoa(time.Now().Year())
 }
 
 func errorResponse(statusCode int, message string) events.APIGatewayV2HTTPResponse {

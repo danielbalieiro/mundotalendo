@@ -186,6 +186,20 @@ export default $config({
       },
     });
 
+    api.route("POST /migrate-year", {
+      handler: "packages/functions/migrate-year",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable],
+      timeout: "300 seconds", // 5 minutes for large migrations
+      memory: "1024 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 1; // Only one migration at a time
+        },
+      },
+    });
+
     api.route("GET /users/locations", {
       handler: "packages/functions/users",
       runtime: "go",
@@ -202,6 +216,20 @@ export default $config({
 
     api.route("GET /readings/{iso3}", {
       handler: "packages/functions/readings",
+      runtime: "go",
+      architecture: "arm64",
+      link: [dataTable],
+      timeout: "30 seconds",
+      memory: "256 MB",
+      transform: {
+        function: (args) => {
+          args.reservedConcurrentExecutions = 10;
+        },
+      },
+    });
+
+    api.route("GET /years", {
+      handler: "packages/functions/years",
       runtime: "go",
       architecture: "arm64",
       link: [dataTable],

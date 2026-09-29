@@ -23,6 +23,7 @@ type ProcessingMeta struct {
 	User      string    // User name
 	AvatarURL string    // User avatar URL
 	Timestamp time.Time // Processing timestamp
+	Year      string    // Year of the marathon (derived from webhook reception time)
 }
 
 // ProcessingResult contains the result of processing a desafio.
@@ -95,7 +96,7 @@ func (p *DesafioProcessor) processDesafio(ctx context.Context, desafio types.Des
 
 	// Create LeituraItem
 	item := types.LeituraItem{
-		PK:          "EVENT#LEITURA",
+		PK:          fmt.Sprintf("EVENT#LEITURA#%s", meta.Year),
 		SK:          fmt.Sprintf("%s#%s#%d", meta.UUID, iso3, index),
 		ISO3:        iso3,
 		Pais:        cleanedCountry,
@@ -105,6 +106,7 @@ func (p *DesafioProcessor) processDesafio(ctx context.Context, desafio types.Des
 		ImagemURL:   meta.AvatarURL,
 		CapaURL:     capaURL,
 		Livro:       bookTitle,
+		Year:        meta.Year,
 		WebhookUUID: meta.UUID,
 		UpdatedAt:   latestUpdate.Format(time.RFC3339),
 	}
@@ -119,8 +121,8 @@ func (p *DesafioProcessor) processDesafio(ctx context.Context, desafio types.Des
 		}
 	}
 
-	log.Printf("Processed: %s (%s) - User: %s - Category: %s - Progress: %d%%",
-		cleanedCountry, iso3, meta.User, cleanedCategory, progress)
+	log.Printf("Processed: %s (%s) - User: %s - Category: %s - Progress: %d%% - Year: %s",
+		cleanedCountry, iso3, meta.User, cleanedCategory, progress, meta.Year)
 
 	return ProcessingResult{
 		ISO3:      iso3,

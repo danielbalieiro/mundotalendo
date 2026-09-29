@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -49,6 +50,18 @@ const (
 var ValidIdentifiers = map[string]bool{
 	"maratona-lendo-paises": true,
 	"mundotalendo-2026":     true,
+}
+
+// identifierPattern matches year-scoped marathon identifiers such as
+// "mundotalendo-2027", so new years are accepted without code changes.
+var identifierPattern = regexp.MustCompile(`^mundotalendo-\d{4}$`)
+
+// isValidIdentifier reports whether the given maratona identifier is accepted.
+func isValidIdentifier(identificador string) bool {
+	if ValidIdentifiers[identificador] {
+		return true
+	}
+	return identifierPattern.MatchString(identificador)
 }
 
 // Config holds the Lambda configuration from environment variables.
@@ -145,7 +158,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	}
 
 	// 4. Validate identificador
-	if !ValidIdentifiers[payload.Maratona.Identificador] {
+	if !isValidIdentifier(payload.Maratona.Identificador) {
 		log.Printf("Ignoring event with identificador: %s", payload.Maratona.Identificador)
 		return successResponse("Event ignored - invalid identificador"), nil
 	}

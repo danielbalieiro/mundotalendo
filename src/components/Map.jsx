@@ -143,9 +143,11 @@ export function buildUserMarkersGeoJSON(users, centroids) {
 
 /**
  * Map component with MapLibre GL JS
+ * @param {Object} props
+ * @param {number|string} [props.year] - Year to display readings for
  * @returns {JSX.Element}
  */
-export default function Map() {
+export default function Map({ year }) {
   const mapContainer = useRef(null)
   const map = useRef(null)
   const [hoveredCountry, setHoveredCountry] = useState(null)
@@ -155,10 +157,13 @@ export default function Map() {
   const [currentPopupIso3, setCurrentPopupIso3] = useState(null) // Track which country popup is showing
   const [layersReady, setLayersReady] = useState(false) // Track when map layers are fully initialized
 
-  const { countries, total, isLoading, error } = useStats()
-  const { users } = useUserLocations()
+  const { countries, total, isLoading: statsLoading, error } = useStats(60000, year)
+  const { users, isLoading: usersLoading } = useUserLocations(year)
   const { fetchReadings, readings, loading: readingsLoading, error: readingsError } = useCountryReadings()
   const { loadImages, loadedCount, totalCount, isLoading: imagesLoading } = useAsyncImages(map.current, 5)
+
+  // True while map data (countries + user markers) is being refreshed for a new year
+  const dataLoading = statsLoading || usersLoading
 
   // Function to apply country colors to the map (memoized with useCallback)
   const applyCountryColors = useCallback(() => {
@@ -224,10 +229,10 @@ export default function Map() {
         })
 
         // Fetch readings data asynchronously
-        await fetchReadings(iso3)
+        await fetchReadings(iso3, year)
       }
     }
-  }, [countries, fetchReadings])
+  }, [countries, fetchReadings, year])
 
   // Store latest click handler in ref to avoid re-registering listener
   const clickHandlerRef = useRef(null)
@@ -640,9 +645,36 @@ export default function Map() {
     }
   }, [users, layersReady])
 
+  // Fade user markers smoothly while data is being refreshed (year change)
+  useEffect(() => {
+    if (!SHOW_USER_MARKERS || !map.current || !layersReady) return
+
+    const opacity = dataLoading ? 0.35 : 1
+    try {
+      if (map.current.getLayer('user-marker-bg')) {
+        map.current.setPaintProperty('user-marker-bg', 'circle-opacity', opacity)
+      }
+      if (map.current.getLayer('user-marker-images')) {
+        map.current.setPaintProperty('user-marker-images', 'icon-opacity', opacity)
+      }
+    } catch (err) {
+      // Silently ignore errors during layer transitions
+    }
+  }, [dataLoading, layersReady])
+
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full" />
+
+      {/* Loading overlay (smooth fade during year change) */}
+      <div
+        className={`absolute inset-0 z-10 flex items-center justify-center bg-white/25 transition-opacity duration-300 pointer-events-none ${
+          dataLoading ? 'opacity-100' : 'opacity-0'
+        }`}
+        aria-hidden="true"
+      >
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-300 border-t-blue-600" />
+      </div>
 
       {/* Hover Tooltip - Country */}
       {hoveredCountry && !hoveredUser && (

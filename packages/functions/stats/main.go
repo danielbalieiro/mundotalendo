@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -51,16 +54,20 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		}, nil
 	}
 
+	// Resolve the year to query (defaults to the current year)
+	year := resolveYear(request)
+
 	// Query DynamoDB for all readings with pagination
 	var allItems []map[string]ddbTypes.AttributeValue
 	var lastKey map[string]ddbTypes.AttributeValue
+	partitionKey := "EVENT#LEITURA#" + year
 
 	for {
 		result, err := dynamoClient.Query(ctx, &dynamodb.QueryInput{
 			TableName:              &tableName,
 			KeyConditionExpression: aws.String("PK = :pk"),
 			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
-				":pk": &ddbTypes.AttributeValueMemberS{Value: "EVENT#LEITURA"},
+				":pk": &ddbTypes.AttributeValueMemberS{Value: partitionKey},
 			},
 			ExclusiveStartKey: lastKey,
 		})
@@ -131,6 +138,14 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		},
 		Body: string(responseBody),
 	}, nil
+}
+
+// resolveYear extracts the year from the query string, defaulting to the current year.
+func resolveYear(request events.APIGatewayV2HTTPRequest) string {
+	if y := strings.TrimSpace(request.QueryStringParameters["year"]); y != "" {
+		return y
+	}
+	return strconv.Itoa(time.Now().Year())
 }
 
 func errorResponse(statusCode int, message string) events.APIGatewayV2HTTPResponse {

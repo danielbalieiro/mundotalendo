@@ -69,6 +69,59 @@ func clearTable(ctx context.Context, tableName, pk string) (int, error) {
 	return count, nil
 }
 
+// clearByPrefix deletes all items whose PK starts with the given prefix.
+// Reads are year-aware (PK = "EVENT#LEITURA#<year>"), so events must be
+// cleared using a prefix scan instead of an exact partition key match.
+func clearByPrefix(ctx context.Context, tableName, prefix string) (int, error) {
+	var lastEvaluatedKey map[string]ddbTypes.AttributeValue
+	count := 0
+
+	for {
+		result, err := dynamoClient.Scan(ctx, &dynamodb.ScanInput{
+			TableName:              &tableName,
+			FilterExpression:       aws.String("begins_with(PK, :pk)"),
+			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+				":pk": &ddbTypes.AttributeValueMemberS{Value: prefix},
+			},
+			ExclusiveStartKey: lastEvaluatedKey,
+		})
+		if err != nil {
+			return count, err
+		}
+
+		for _, item := range result.Items {
+			var keys struct {
+				PK string `dynamodbav:"PK"`
+				SK string `dynamodbav:"SK"`
+			}
+			if err := attributevalue.UnmarshalMap(item, &keys); err != nil {
+				continue
+			}
+
+			keyMap, _ := attributevalue.MarshalMap(map[string]string{
+				"PK": keys.PK,
+				"SK": keys.SK,
+			})
+			_, err := dynamoClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+				TableName: &tableName,
+				Key:       keyMap,
+			})
+			if err != nil {
+				log.Printf("Error deleting item: %v", err)
+				continue
+			}
+			count++
+		}
+
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		lastEvaluatedKey = result.LastEvaluatedKey
+	}
+
+	return count, nil
+}
+
 func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	log.Println("Clearing all data from table")
 
@@ -88,7 +141,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 		}, nil
 	}
 
-	eventsDeleted, err := clearTable(ctx, tableName, "EVENT#LEITURA")
+	eventsDeleted, err := clearByPrefix(ctx, tableName, "EVENT#LEITURA")
 	if err != nil {
 		log.Printf("Error clearing events: %v", err)
 	}

@@ -59,17 +59,20 @@ func (s *LeituraStore) SaveLeitura(ctx context.Context, item types.LeituraItem) 
 	return nil
 }
 
-// DeleteOldUserReadings removes all existing readings for a user.
-// This ensures each webhook replaces the user's previous data completely.
+// DeleteOldUserReadings removes all existing readings for a user in a given year.
+// This ensures each webhook replaces the user's previous data for that year
+// completely, while preserving readings from other years.
 // It uses the GSI UserIndex to find items efficiently.
 //
-// Note: This function only deletes EVENT#LEITURA items, not WEBHOOK#PAYLOAD.
+// Note: This function only deletes EVENT#LEITURA#<year> items, not WEBHOOK#PAYLOAD.
 //
 // Returns:
 //   - int: Number of items deleted
 //   - error: ErrDynamoDBWrite if deletion fails
-func (s *LeituraStore) DeleteOldUserReadings(ctx context.Context, user string) (int, error) {
-	log.Printf("Querying old readings for user: %s", user)
+func (s *LeituraStore) DeleteOldUserReadings(ctx context.Context, user string, year string) (int, error) {
+	log.Printf("Querying old readings for user: %s (year: %s)", user, year)
+
+	prefix := "EVENT#LEITURA#" + year
 
 	// Query using GSI UserIndex
 	result, err := s.client.Query(ctx, &dynamodb.QueryInput{
@@ -92,7 +95,7 @@ func (s *LeituraStore) DeleteOldUserReadings(ctx context.Context, user string) (
 		return 0, nil
 	}
 
-	// Delete each EVENT#LEITURA item
+	// Delete each EVENT#LEITURA#<year> item
 	deletedCount := 0
 	for _, item := range result.Items {
 		pk, okPK := item["PK"].(*ddbtypes.AttributeValueMemberS)
@@ -103,8 +106,8 @@ func (s *LeituraStore) DeleteOldUserReadings(ctx context.Context, user string) (
 			continue
 		}
 
-		// Only delete EVENT#LEITURA items (protect WEBHOOK#PAYLOAD from deletion)
-		if !strings.HasPrefix(pk.Value, "EVENT#LEITURA") {
+		// Only delete EVENT#LEITURA#<year> items (protect WEBHOOK#PAYLOAD and other years)
+		if !strings.HasPrefix(pk.Value, prefix) {
 			continue
 		}
 
@@ -122,6 +125,6 @@ func (s *LeituraStore) DeleteOldUserReadings(ctx context.Context, user string) (
 		deletedCount++
 	}
 
-	log.Printf("Deleted %d old readings for user %s", deletedCount, user)
+	log.Printf("Deleted %d old readings for user %s (year: %s)", deletedCount, user, year)
 	return deletedCount, nil
 }

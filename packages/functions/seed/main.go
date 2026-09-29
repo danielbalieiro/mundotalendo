@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -82,6 +83,7 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 	inserted := 0
 	categories := []string{"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
 		"Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"}
+	year := strconv.Itoa(time.Now().Year())
 
 	for i := 0; i < count; i++ {
 		// Random country
@@ -142,17 +144,20 @@ func handler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (event
 			Item:      avWebhook,
 		})
 
-		// Create reading item with UUID-based keys
+		// Create reading item with UUID-based keys (matching the consumer processor)
 		item := types.LeituraItem{
-			PK:        fmt.Sprintf("EVENT#LEITURA#%s", seedUUID),
-			SK:        fmt.Sprintf("COUNTRY#%s", iso3),
-			ISO3:      iso3,
-			Pais:      randomCountry,
-			Categoria: randomCategory,
-			Progresso: randomProgress,
-			User:      userName,
-			ImagemURL: fmt.Sprintf("https://i.pravatar.cc/150?u=%s", userName),
-			Livro:     fmt.Sprintf("Livro sobre %s", randomCountry),
+			PK:          fmt.Sprintf("EVENT#LEITURA#%s", year),
+			SK:          fmt.Sprintf("%s#%s#%d", seedUUID, iso3, 0),
+			ISO3:        iso3,
+			Pais:        randomCountry,
+			Categoria:   randomCategory,
+			Progresso:   randomProgress,
+			User:        userName,
+			ImagemURL:   fmt.Sprintf("https://i.pravatar.cc/150?u=%s", userName),
+			Livro:       fmt.Sprintf("Livro sobre %s", randomCountry),
+			Year:        year,
+			WebhookUUID: seedUUID,
+			UpdatedAt:   timestamp.Format(time.RFC3339),
 		}
 
 		av, err := attributevalue.MarshalMap(item)
